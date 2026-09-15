@@ -1,0 +1,13 @@
+{
+  "include": [
+    {
+      "content_key": "d392ec66e89fb733debc81211f0c8508348ed4f46ffb52c9396215fbb6e91c85",
+      "config_name": "numpy-windows_x86_64_cp312",
+      "runner": "windows-latest",
+      "os": "windows",
+      "arch": "x86_64",
+      "libc": null,
+      "python": "3.12"
+    }
+  ]
+}
