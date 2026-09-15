@@ -1,0 +1,96 @@
+{
+  "id": "numpy-linux_x86_64_cp312",
+  "out": "out",
+  "name": "numpy",
+  "repo": "numpy",
+  "sbom": {
+    "full": true,
+    "cdxgen": "cdxgen",
+    "technology": "python",
+    "constraints": null,
+    "requirements": "requirements/build_requirements.txt",
+    "spec_version": "1.6"
+  },
+  "build": {
+    "keep": [],
+    "adapter": "meson",
+    "test_cmd": "python -m pip install -r requirements/build_requirements.txt -r requirements/test_requirements.txt && python -m spin test -- --timeout=600 --durations=10",
+    "artifacts": [
+      "build-install/**/site-packages/numpy/**/*.so"
+    ],
+    "build_cmd": "python -m pip install -r requirements/build_requirements.txt && git submodule update --init && python -m spin build",
+    "build_dir": "build",
+    "clean_cmd": "rm -rf build build-install .mesonpy-native .pytest_cache",
+    "install_dir": "build-install",
+    "test_artifacts": []
+  },
+  "source": "https://github.com/numpy/numpy",
+  "config_name": "numpy-linux_x86_64_cp312",
+  "scan_processes": 2,
+  "project_license": "BSD-3-Clause",
+  "component_prefixes": [
+    [
+      "numpy",
+      "core library",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "doc",
+      "documentation",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "tools",
+      "developer tools",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "meson_cpu",
+      "meson CPU config",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "benchmarks",
+      "benchmarks",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "branding",
+      "branding assets",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "pixi-packages",
+      "pixi packages",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "requirements",
+      "requirements files",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "vendored-meson",
+      "meson (git submodule)",
+      {
+        "origin": "third-party"
+      }
+    ]
+  ]
+}

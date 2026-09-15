@@ -132,6 +132,11 @@ jobs:
       - name: Assemble the evidence bundle
         if: always()
         run: |
+          # `out/` is created by a step that may never have run: if the cell
+          # fails the integrity gate, every later step is skipped and these
+          # always() steps still fire. Without this they cascade into four more
+          # red steps that say nothing about the actual failure.
+          mkdir -p out
           [ -f out/exit_code ] || echo 99 > out/exit_code
           cp "abis/cells/${{ matrix.config_name }}.json" out/cell-config.source.json || true
           tar -czf bundle.tar.gz out

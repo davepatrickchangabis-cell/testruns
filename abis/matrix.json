@@ -1,0 +1,13 @@
+{
+  "include": [
+    {
+      "content_key": "d7fdb70ff32ba0ea9ac66edc2be1dd781dbc023c65becd867e55c9d8c088e333",
+      "config_name": "numpy-linux_x86_64_cp312",
+      "runner": "ubuntu-latest",
+      "os": "linux",
+      "arch": "x86_64",
+      "libc": "glibc",
+      "python": "3.12"
+    }
+  ]
+}
