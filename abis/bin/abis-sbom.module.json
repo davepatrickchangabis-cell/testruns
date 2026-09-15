@@ -1,0 +1,106 @@
+{
+  "name": "sbom",
+  "version": "0.1.0",
+  "payload": {
+    "kind": "zipapp",
+    "entrypoints": {
+      "pipeline": "abis-pipeline.pyz",
+      "lineage": "abis-lineage.pyz",
+      "licensescan": "abis-licensescan.pyz"
+    },
+    "requires": {
+      "python": ">=3.10"
+    },
+    "inputs": {
+      "source_dir": "/in"
+    },
+    "outputs": {
+      "envelope": "/out"
+    },
+    "resources": {
+      "cpu": 2,
+      "memory": "6Gi",
+      "timeout": "45m"
+    },
+    "network": "none",
+    "runtime": "microvm"
+  },
+  "adapter": {
+    "db_schema": "mod_sbom",
+    "object_prefix": "sbom/",
+    "migrations": null
+  },
+  "projection": {
+    "entities": [
+      "build_configuration",
+      "file",
+      "license",
+      "no_license",
+      "no_package",
+      "output_assembly",
+      "package"
+    ],
+    "edges": [
+      {
+        "kind": "built_into",
+        "from": "file",
+        "to": "output_assembly"
+      },
+      {
+        "kind": "built_with",
+        "from": "file",
+        "to": "build_configuration"
+      },
+      {
+        "kind": "has",
+        "from": "file",
+        "to": "license"
+      },
+      {
+        "kind": "has",
+        "from": "file",
+        "to": "no_license"
+      },
+      {
+        "kind": "part_of",
+        "from": "file",
+        "to": "no_package"
+      },
+      {
+        "kind": "part_of",
+        "from": "file",
+        "to": "package"
+      },
+      {
+        "kind": "uses",
+        "from": "file",
+        "to": "file"
+      },
+      {
+        "kind": "built_with",
+        "from": "output_assembly",
+        "to": "build_configuration"
+      },
+      {
+        "kind": "has",
+        "from": "package",
+        "to": "license"
+      },
+      {
+        "kind": "has",
+        "from": "package",
+        "to": "no_license"
+      },
+      {
+        "kind": "uses",
+        "from": "package",
+        "to": "package"
+      }
+    ],
+    "findings": []
+  },
+  "ui": {
+    "run_view": "sbom.graph"
+  },
+  "tools": []
+}
