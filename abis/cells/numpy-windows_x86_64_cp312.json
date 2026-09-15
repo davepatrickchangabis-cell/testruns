@@ -1,0 +1,61 @@
+{
+  "id": "numpy-windows_x86_64_cp312",
+  "out": "out",
+  "name": "numpy",
+  "repo": "numpy",
+  "sbom": {
+    "full": true,
+    "cdxgen": "cdxgen",
+    "technology": "python",
+    "constraints": null,
+    "requirements": "requirements/build_requirements.txt",
+    "spec_version": "1.6"
+  },
+  "build": {
+    "keep": [],
+    "adapter": "meson",
+    "test_cmd": "python -m pip install -r requirements/test_requirements.txt && spin test -- --durations=10 --timeout=600",
+    "artifacts": [
+      "build-install/**/site-packages/numpy/**/*.pyd"
+    ],
+    "build_cmd": "spin build",
+    "build_dir": "build",
+    "clean_cmd": "spin build --clean",
+    "install_dir": "build-install",
+    "test_artifacts": []
+  },
+  "source": "https://github.com/numpy/numpy",
+  "config_name": "numpy-windows_x86_64_cp312",
+  "scan_processes": 2,
+  "project_license": "BSD-3-Clause",
+  "component_prefixes": [
+    [
+      "numpy",
+      "core",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "doc",
+      "docs",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "tools",
+      "tools",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "meson_cpu",
+      "build-cpu-config",
+      {
+        "origin": "first-party"
+      }
+    ]
+  ]
+}

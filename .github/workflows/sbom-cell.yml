@@ -1,0 +1,166 @@
+# The workflow one ABIS run deploys to its run repository.
+#
+# Rendered into a run ref by src/deploy.ts. Nothing here varies per run: the
+# matrix comes from abis/matrix.json and the target from abis/run.json, both
+# committed into the ref, so dispatch carries ONE input and a 42-cell matrix
+# cannot hit the dispatch input size limit.
+#
+# THE ORDER OF THE LAST THREE STEPS IS LOAD-BEARING. Evidence is uploaded
+# BEFORE the job is failed. A cell that exits 1, 2 or 3 is a finding the
+# customer needs, and a finding with no retained evidence behind it is a demo.
+
+name: abis sbom cell
+run-name: abis ${{ inputs.abis_run_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      abis_run_id:
+        description: ABIS run id. Everything else comes from abis/ on this ref.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.read.outputs.include }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+      - id: read
+        run: echo "include=$(jq -c '.include' abis/matrix.json)" >> "$GITHUB_OUTPUT"
+
+  cell:
+    needs: matrix
+    strategy:
+      # "This configuration does not build" is a finding; cancelling the matrix
+      # destroys 41 good results to report one bad one.
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out the run ref (our pipeline — never the target's code)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      # Fail closed before a single zipapp executes.
+      - name: Verify the zipapps against SHA256SUMS
+        working-directory: abis/bin
+        run: sha256sum --check --strict SHA256SUMS
+
+      - name: Read abis/run.json
+        id: run
+        run: |
+          jq -r '
+            "target_repo=\(.target.owner)/\(.target.repo)",
+            "target_name=\(.target.repo)",
+            "target_sha=\(.target.sha)"
+          ' abis/run.json >> "$GITHUB_OUTPUT"
+
+      # `path` is the target's own repo name: the pipeline validates the cell
+      # config's FILENAME against the basename of the checkout.
+      - name: Check out the target at its pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.run.outputs.target_repo }}
+          ref: ${{ steps.run.outputs.target_sha }}
+          path: ${{ steps.run.outputs.target_name }}
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      # Hosted-runner path. In the container path these live in the pinned
+      # manylinux image and this step disappears.
+      - name: Provision the scan tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install scancode-toolkit
+          npm install --global @cyclonedx/cdxgen
+
+      - name: Record the runner image
+        run: |
+          mkdir -p out
+          jq -n --arg image_os "${ImageOS:-unknown}" \
+                --arg image_version "${ImageVersion:-unknown}" \
+                --arg runner "${{ matrix.runner }}" \
+                --arg content_key "${{ matrix.content_key }}" \
+                --arg abis_run_id "${{ inputs.abis_run_id }}" \
+                '$ARGS.named' > out/runner.json
+
+      - name: Resolve the cell config
+        run: |
+          jq --arg ws "$GITHUB_WORKSPACE" \
+             '.repo = $ws + "/" + .repo | .out = $ws + "/" + .out' \
+             "abis/cells/${{ matrix.config_name }}.json" \
+             > "out/${{ matrix.config_name }}.json"
+          cat "out/${{ matrix.config_name }}.json"
+
+      # 0 qualified · 1 stage failure · 2 graph-integrity failure ·
+      # 3 verification failed. Never collapsed, and never allowed to fail this
+      # step — the upload below has to run either way.
+      - name: Run the ABIS pipeline
+        id: pipeline
+        timeout-minutes: 320
+        continue-on-error: true
+        run: |
+          set +e
+          python abis/bin/abis-pipeline.pyz --config "out/${{ matrix.config_name }}.json"
+          code=$?
+          set -e
+          echo "$code" > out/exit_code
+          echo "pipeline exited $code"
+
+      - name: Assemble the evidence bundle
+        if: always()
+        run: |
+          [ -f out/exit_code ] || echo 99 > out/exit_code
+          cp "abis/cells/${{ matrix.config_name }}.json" out/cell-config.source.json || true
+          tar -czf bundle.tar.gz out
+          sha256sum bundle.tar.gz
+
+      - name: Upload the evidence bundle
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bundle-${{ matrix.config_name }}
+          path: bundle.tar.gz
+          compression-level: 0
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Attest the bundle
+        if: always()
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: bundle.tar.gz
+
+      - name: Report the cell's exit code
+        if: always()
+        run: |
+          code="$(cat out/exit_code)"
+          case "$code" in
+            0) echo "::notice::qualified — built, reduced, rebuilt, tests pass" ;;
+            1) echo "::error::stage failure"; exit 1 ;;
+            2) echo "::error::graph-integrity failure"; exit 1 ;;
+            3) echo "::error::verification failed"; exit 1 ;;
+            *) echo "::error::pipeline did not report an exit code"; exit 1 ;;
+          esac
