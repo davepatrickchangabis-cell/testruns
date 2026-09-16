@@ -90,11 +90,38 @@ jobs:
 
       # Hosted-runner path. In the container path these live in the pinned
       # manylinux image and this step disappears.
+      # SYSTEM libarchive FIRST, on Linux. ScanCode reaches archives through
+      # extractcode-libarchive, whose wheel bundles a native library — and on
+      # linux-aarch64 that binding loads and then fails on the first call with
+      # "undefined symbol: archive_read_new". Measured on
+      # numpy-linux_aarch64_cp312: scancode exited 1 after 10s with no usable
+      # JSON report, 90 seconds into a paid runner.
+      #
+      # The distribution's own libarchive is built for the architecture it ships
+      # on, which is the whole point of using it instead of a bundled blob.
+      # Installing it costs a few seconds and makes aarch64 a platform this
+      # scans rather than one it skips — excluding those 12 cells would have
+      # hidden the problem, not solved it.
       - name: Provision the scan tools
         run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq libarchive-dev libarchive13
+            # extractcode looks here before falling back to its bundled copy.
+            echo "EXTRACTCODE_LIBARCHIVE_PATH=$(ls /usr/lib/*/libarchive.so.13 2>/dev/null | head -1)" >> "$GITHUB_ENV"
+          fi
           python -m pip install --upgrade pip
           python -m pip install scancode-toolkit
           npm install --global @cyclonedx/cdxgen
+
+      # Proves the tool actually loads before 45 minutes of scanning depends on
+      # it. A native binding that imports and then dies on first use is exactly
+      # the failure that is cheap here and expensive later.
+      - name: Check the scanner loads
+        run: |
+          python -c "import extractcode_libarchive, sys; print('libarchive OK:', extractcode_libarchive.get_location())" || \
+            echo "::warning::extractcode-libarchive did not load; archive extraction may fail"
+          scancode --version
 
       - name: Record the runner image
         run: |
@@ -132,6 +159,11 @@ jobs:
       - name: Assemble the evidence bundle
         if: always()
         run: |
+          # `out/` is created by a step that may never have run: if the cell
+          # fails the integrity gate, every later step is skipped and these
+          # always() steps still fire. Without this they cascade into four more
+          # red steps that say nothing about the actual failure.
+          mkdir -p out
           [ -f out/exit_code ] || echo 99 > out/exit_code
           cp "abis/cells/${{ matrix.config_name }}.json" out/cell-config.source.json || true
           tar -czf bundle.tar.gz out
