@@ -1,0 +1,96 @@
+{
+  "id": "numpy-linux_aarch64_cp312",
+  "out": "out",
+  "name": "numpy",
+  "repo": "numpy",
+  "sbom": {
+    "full": true,
+    "cdxgen": "cdxgen",
+    "technology": "python",
+    "constraints": null,
+    "requirements": "requirements/build_requirements.txt",
+    "spec_version": "1.6"
+  },
+  "build": {
+    "keep": [],
+    "adapter": "meson",
+    "test_cmd": "python -m pip install -r requirements/test_requirements.txt && spin test -- --durations=10 --timeout=600",
+    "artifacts": [
+      "build-install/**/site-packages/numpy/**/*.so"
+    ],
+    "build_cmd": "python -m pip install -r requirements/build_requirements.txt && git submodule update --init --recursive && spin build --clean",
+    "build_dir": "build",
+    "clean_cmd": "rm -rf build build-install",
+    "install_dir": "build-install",
+    "test_artifacts": []
+  },
+  "source": "https://github.com/numpy/numpy",
+  "config_name": "numpy-linux_aarch64_cp312",
+  "scan_processes": 2,
+  "project_license": "BSD-3-Clause",
+  "component_prefixes": [
+    [
+      "numpy",
+      "numpy",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "doc",
+      "documentation",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "tools",
+      "tools",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "benchmarks",
+      "benchmarks",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "branding",
+      "branding",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "meson_cpu",
+      "meson_cpu",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "requirements",
+      "requirements",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "pixi-packages",
+      "pixi-packages",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "vendored-meson",
+      "meson (vendored submodule)",
+      {
+        "origin": "third-party"
+      }
+    ]
+  ]
+}

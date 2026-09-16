@@ -1,0 +1,13 @@
+{
+  "include": [
+    {
+      "content_key": "c9f184ad585450e6e8fd6357491df5d5ad259010cc9e3fa3a77c5d67a66e6589",
+      "config_name": "numpy-linux_aarch64_cp312",
+      "runner": "ubuntu-24.04-arm",
+      "os": "linux",
+      "arch": "aarch64",
+      "libc": "glibc",
+      "python": "3.12"
+    }
+  ]
+}
