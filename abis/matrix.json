@@ -1,0 +1,15 @@
+{
+  "include": [],
+  "declared": [
+    {
+      "content_key": "cd122c6258d5bb276b60a5ead6b144fae099c0f238e4b60071b3343f342bd165",
+      "config_name": "numpy-declared",
+      "runner": "ubuntu-latest",
+      "os": "linux",
+      "arch": "x86_64",
+      "libc": null,
+      "python": "3.12"
+    }
+  ],
+  "preflight": []
+}

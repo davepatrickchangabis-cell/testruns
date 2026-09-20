@@ -1,0 +1,14 @@
+{
+  "id": "numpy-declared",
+  "name": "numpy",
+  "repo": "numpy",
+  "source": "https://github.com/numpy/numpy",
+  "out": "out",
+  "sbom": {
+    "technology": "auto",
+    "cdxgen": "cdxgen",
+    "spec_version": "1.7",
+    "requirements": null,
+    "full": false
+  }
+}
