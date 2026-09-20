@@ -29,21 +29,55 @@ defaults:
   run:
     shell: bash
 
+# THE COST CEILING LIVES HERE FIRST, because GitHub enforces this file whether
+# or not anything on our side is running — and the bug that prompted it is
+# precisely that nothing on our side was. Run 40b93ffc failed on GitHub after
+# 41 minutes and the server showed it as `running` for 3.9 days, because the
+# worker that polls exited six seconds after the run's first poll.
+#
+# `timeout-minutes` on each job below is the part that matters: it bounds the
+# spend. This concurrency group is narrower than it looks — one `abis_run_id`
+# is dispatched once, so it cannot collide with another run. What it does stop
+# is the same run id being dispatched a second time by hand from the Actions
+# tab, which starts a second 42-cell matrix charging alongside the first and is
+# the one double-spend a person can cause by clicking Re-run.
+concurrency:
+  group: abis-${{ inputs.abis_run_id }}
+  cancel-in-progress: true
+
 jobs:
   matrix:
     runs-on: ubuntu-latest
+    # Reads one JSON file. A minute is already generous; anything longer is a
+    # runner that is not coming back, and it is holding 42 cells behind it.
+    timeout-minutes: 5
     outputs:
       include: ${{ steps.read.outputs.include }}
+      declared: ${{ steps.read.outputs.declared }}
+      preflight: ${{ steps.read.outputs.preflight }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.ref }}
           persist-credentials: false
+      # `// []` so a bundle written before abis/matrix.json carried `declared`
+      # yields an empty list rather than the string "null", which the guards
+      # below compare against and which would read as "there is one".
       - id: read
-        run: echo "include=$(jq -c '.include' abis/matrix.json)" >> "$GITHUB_OUTPUT"
+        run: |
+          {
+            echo "include=$(jq -c '.include // []' abis/matrix.json)"
+            echo "declared=$(jq -c '.declared // []' abis/matrix.json)"
+            echo "preflight=$(jq -c '.preflight // []' abis/matrix.json)"
+          } >> "$GITHUB_OUTPUT"
 
   cell:
     needs: matrix
+    # A declared-only run has no build cells, and GitHub fails a job whose
+    # matrix include is empty ("Matrix vector 'include' does not contain any
+    # values") rather than skipping it. The guard is what lets one workflow
+    # serve both kinds of run.
+    if: needs.matrix.outputs.include != '[]'
     strategy:
       # "This configuration does not build" is a finding; cancelling the matrix
       # destroys 41 good results to report one bad one.
@@ -51,6 +85,20 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.matrix.outputs.include) }}
     runs-on: ${{ matrix.runner }}
+    # THE JOB'S OWN LIMIT, and its absence is what made this a cost trap rather
+    # than a bounded one. The pipeline step below is capped at 320 minutes;
+    # every other step — apt-get, pip, npm, three checkouts, one of them
+    # `submodules: recursive` against a repository we do not control — was
+    # capped at nothing, which means GitHub's default of 360 minutes EACH.
+    # Multiply by 42 cells, at 2× for the 18 Windows ones, and an accident
+    # invoices like a fleet.
+    #
+    # 330 sits just above the pipeline's own 320 on purpose: the pipeline must
+    # be the thing that times out, because its timeout leaves the `always()`
+    # evidence steps to run and produce a bundle explaining the overrun. A job
+    # killed at the job level takes them with it, so this number's only job is
+    # to be the backstop that never fires first.
+    timeout-minutes: 330
     steps:
       - name: Check out the run ref (our pipeline — never the target's code)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -90,11 +138,38 @@ jobs:
 
       # Hosted-runner path. In the container path these live in the pinned
       # manylinux image and this step disappears.
+      # SYSTEM libarchive FIRST, on Linux. ScanCode reaches archives through
+      # extractcode-libarchive, whose wheel bundles a native library — and on
+      # linux-aarch64 that binding loads and then fails on the first call with
+      # "undefined symbol: archive_read_new". Measured on
+      # numpy-linux_aarch64_cp312: scancode exited 1 after 10s with no usable
+      # JSON report, 90 seconds into a paid runner.
+      #
+      # The distribution's own libarchive is built for the architecture it ships
+      # on, which is the whole point of using it instead of a bundled blob.
+      # Installing it costs a few seconds and makes aarch64 a platform this
+      # scans rather than one it skips — excluding those 12 cells would have
+      # hidden the problem, not solved it.
       - name: Provision the scan tools
         run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq libarchive-dev libarchive13
+            # extractcode looks here before falling back to its bundled copy.
+            echo "EXTRACTCODE_LIBARCHIVE_PATH=$(ls /usr/lib/*/libarchive.so.13 2>/dev/null | head -1)" >> "$GITHUB_ENV"
+          fi
           python -m pip install --upgrade pip
           python -m pip install scancode-toolkit
           npm install --global @cyclonedx/cdxgen
+
+      # Proves the tool actually loads before 45 minutes of scanning depends on
+      # it. A native binding that imports and then dies on first use is exactly
+      # the failure that is cheap here and expensive later.
+      - name: Check the scanner loads
+        run: |
+          python -c "import extractcode_libarchive, sys; print('libarchive OK:', extractcode_libarchive.get_location())" || \
+            echo "::warning::extractcode-libarchive did not load; archive extraction may fail"
+          scancode --version
 
       - name: Record the runner image
         run: |
@@ -132,6 +207,11 @@ jobs:
       - name: Assemble the evidence bundle
         if: always()
         run: |
+          # `out/` is created by a step that may never have run: if the cell
+          # fails the integrity gate, every later step is skipped and these
+          # always() steps still fire. Without this they cascade into four more
+          # red steps that say nothing about the actual failure.
+          mkdir -p out
           [ -f out/exit_code ] || echo 99 > out/exit_code
           cp "abis/cells/${{ matrix.config_name }}.json" out/cell-config.source.json || true
           tar -czf bundle.tar.gz out
@@ -164,3 +244,491 @@ jobs:
             3) echo "::error::verification failed"; exit 1 ;;
             *) echo "::error::pipeline did not report an exit code"; exit 1 ;;
           esac
+
+  # ── The declared answer ────────────────────────────────────────────────
+  #
+  # What the repository SAYS it depends on, read off its manifests. No build,
+  # no tracer, no reduction, no rebuild — so none of the 320-minute machinery
+  # above applies and neither does its cost.
+  #
+  # IT CHECKS THE TARGET OUT RATHER THAN READING THE SNAPSHOT, because the
+  # scanner wants a filesystem and this server has the repository in Postgres.
+  # Same commit, and the snapshot has been proved to rebuild that commit's git
+  # tree, so it is the same bytes — see the banner in src/declared.ts.
+  #
+  # `submodules: false`, deliberately and unlike the build job: a snapshot
+  # records a gitlink, not the submodule's contents, so pulling them in here
+  # would describe a tree larger than the one this run claims to be about.
+  declared:
+    needs: matrix
+    if: needs.matrix.outputs.declared != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.declared) }}
+    runs-on: ${{ matrix.runner }}
+    # Reading manifests, not building. cdxgen's own resolution is the slow
+    # part and it is minutes; an hour is the backstop, not the expectation.
+    timeout-minutes: 60
+    steps:
+      - name: Check out the run ref (our pipeline — never the target's code)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Verify the zipapps against SHA256SUMS
+        working-directory: abis/bin
+        run: sha256sum --check --strict SHA256SUMS
+
+      - name: Read abis/run.json
+        id: run
+        run: |
+          jq -r '
+            "target_repo=\(.target.owner)/\(.target.repo)",
+            "target_name=\(.target.repo)",
+            "target_sha=\(.target.sha)"
+          ' abis/run.json >> "$GITHUB_OUTPUT"
+
+      - name: Check out the target at its pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.run.outputs.target_repo }}
+          ref: ${{ steps.run.outputs.target_sha }}
+          path: ${{ steps.run.outputs.target_name }}
+          submodules: false
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      # BOTH HALVES, and the first version of this job installed only cdxgen.
+      # Dave, 2026-09-20, reading what that produced for notepad-plus-plus —
+      # 7 components, all of them GitHub Actions: "there must be an error I
+      # expected alot of packages that is uses with all the compliance
+      # information a huge company like siemens needs".
+      #
+      # There was no error. notepad-plus-plus DECLARES nothing — no
+      # package.json, no requirements.txt, no conan, no vcpkg.json — and
+      # vendors Scintilla, Lexilla and boost::regex as source. cdxgen found
+      # every manifest there was to find, and the manifests were CI workflows.
+      #
+      # For a tree like that the compliance answer is per FILE, not per
+      # package: 2,415 files, their licence expressions, their copyright
+      # holders. That is ScanCode, and it is why it is installed here now.
+      - name: Provision the scanners
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libarchive-dev libarchive13
+          echo "EXTRACTCODE_LIBARCHIVE_PATH=$(ls /usr/lib/*/libarchive.so.13 2>/dev/null | head -1)" >> "$GITHUB_ENV"
+          python -m pip install --upgrade pip
+          python -m pip install scancode-toolkit
+          npm install --global @cyclonedx/cdxgen
+          cdxgen --version
+          scancode --version
+
+      - name: Record the runner image
+        run: |
+          mkdir -p out
+          jq -n --arg image_os "${ImageOS:-unknown}" \
+                --arg image_version "${ImageVersion:-unknown}" \
+                --arg runner "${{ matrix.runner }}" \
+                --arg content_key "${{ matrix.content_key }}" \
+                --arg abis_run_id "${{ inputs.abis_run_id }}" \
+                --arg mode "declared" \
+                '$ARGS.named' > out/runner.json
+
+      # EVERY FIELD THE CONFIG DECLARES IS PASSED, and spec_version is here
+      # because it was not. The config said CycloneDX 1.7 and the first runs
+      # produced 1.6 — abis_sbom's own default — because the scan step named
+      # only --repo, --technology and --out. A declared field the job ignores
+      # is a config file that lies, and this one lies about the format of the
+      # deliverable.
+      - name: Resolve the cell config
+        id: cell
+        run: |
+          cp "abis/cells/${{ matrix.config_name }}.json" out/cell-config.source.json
+          jq -r '
+            "technology=\(.sbom.technology)",
+            "spec_version=\(.sbom.spec_version)"
+          ' "abis/cells/${{ matrix.config_name }}.json" >> "$GITHUB_OUTPUT"
+          cat "abis/cells/${{ matrix.config_name }}.json"
+
+      # continue-on-error for the reason the build job gives: the evidence
+      # upload below has to run whether this succeeded or not. A scan that
+      # failed is a finding, and a finding with no retained output is a demo.
+      - name: Scan the declared dependencies
+        id: sbom
+        continue-on-error: true
+        run: |
+          set +e
+          python abis/bin/abis-sbom.pyz \
+            --repo "$GITHUB_WORKSPACE/${{ steps.run.outputs.target_name }}" \
+            --technology "${{ steps.cell.outputs.technology }}" \
+            --spec-version "${{ steps.cell.outputs.spec_version }}" \
+            --out out/sbom
+          code=$?
+          set -e
+          echo "$code" > out/exit_code
+          echo "abis-sbom exited $code"
+
+      # THE COMPLIANCE HALF. Per-file licence expressions, copyright holders
+      # and ScanCode's confidence score, plus an SPDX tag/value document
+      # written by spdx-tools — which ScanCode pins (spdx_tools==0.8.2), so
+      # the official library is what serialises it, from a scan we are already
+      # paying for. Separate exit code: a licence scan that failed must not be
+      # reported as a missing SBOM, or the other way round.
+      - name: Scan every file for licences, and write SPDX
+        id: licences
+        continue-on-error: true
+        run: |
+          set +e
+          python abis/bin/abis-licensescan.pyz \
+            --repo "$GITHUB_WORKSPACE/${{ steps.run.outputs.target_name }}" \
+            --repo-id "${{ steps.run.outputs.target_name }}" \
+            --source "${{ steps.run.outputs.target_repo }}" \
+            --out out/license \
+            --processes 4
+          code=$?
+          set -e
+          echo "$code" > out/license_exit_code
+          echo "abis-licensescan exited $code"
+
+      - name: Assemble the evidence bundle
+        if: always()
+        run: |
+          mkdir -p out
+          [ -f out/exit_code ] || echo 99 > out/exit_code
+          [ -f out/license_exit_code ] || echo 99 > out/license_exit_code
+          tar -czf bundle.tar.gz out
+          sha256sum bundle.tar.gz
+
+      - name: Upload the evidence bundle
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bundle-${{ matrix.config_name }}
+          path: bundle.tar.gz
+          compression-level: 0
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Attest the bundle
+        if: always()
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: bundle.tar.gz
+
+      # Both halves reported, and the job fails if either did. An SBOM with no
+      # licence scan behind it is half an answer, and saying so afterwards is
+      # cheaper than someone discovering it during a clearing review.
+      - name: Report what each half did
+        if: always()
+        run: |
+          sbom="$(cat out/exit_code)"
+          lic="$(cat out/license_exit_code)"
+          if [ "$sbom" = "0" ]; then
+            echo "::notice::declared SBOM written — out/sbom/bom.json"
+          else
+            echo "::error::abis-sbom exited $sbom"
+          fi
+          if [ "$lic" = "0" ]; then
+            echo "::notice::licence scan written — out/license/**, SPDX included"
+          else
+            echo "::error::abis-licensescan exited $lic"
+          fi
+          [ "$sbom" = "0" ] && [ "$lic" = "0" ]
+
+  # ── The preflight ──────────────────────────────────────────────────────
+  #
+  # ONE QUESTION, ASKED ON A REAL MACHINE: what does this build actually put on
+  # disk? Everything else in this file is downstream of `build.artifacts`, the
+  # glob set the reduction proof compares — and that field is the one thing
+  # about a repository that is stated at no commit, because build outputs do
+  # not exist until something builds them. `prepare.assemble` computes it from
+  # an install-tree formula that describes a Python extension under
+  # site-packages, which is true of a meson or cc build of a Python package and
+  # of nothing else. An MSBuild project writes to $(OutDir) and the server has
+  # no way to know where that is.
+  #
+  # So this job builds, and lists what appeared. It runs NO scanner: no
+  # ScanCode, no cdxgen, no libarchive, no pipeline zipapp. Its config is not a
+  # pipeline config and is never handed to `abis_pipeline/config.py` — it
+  # carries a build command and nothing else, which is what lets it run on a
+  # cell Prepare REFUSED for the missing globs it is here to discover.
+  #
+  # It is priced to be run before the rocket: one job per (os, arch) rather than
+  # per cell, no tool provisioning, and a cap well under the build job's 320.
+  preflight:
+    needs: matrix
+    if: needs.matrix.outputs.preflight != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.preflight) }}
+    runs-on: ${{ matrix.runner }}
+    # A build with no scan behind it. If a target cannot compile in 90 minutes
+    # on a hosted runner the full cell was never going to fit in 320 either,
+    # and finding that out here costs one job instead of forty-two.
+    timeout-minutes: 90
+    steps:
+      - name: Check out the run ref (our pipeline — never the target's code)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Read abis/run.json
+        id: run
+        run: |
+          jq -r '
+            "target_repo=\(.target.owner)/\(.target.repo)",
+            "target_name=\(.target.repo)",
+            "target_sha=\(.target.sha)"
+          ' abis/run.json >> "$GITHUB_OUTPUT"
+
+      # `submodules: recursive`, matching the build job and unlike the declared
+      # one: this compiles the thing, and a build missing its submodules fails
+      # for a reason that has nothing to do with the question being asked.
+      - name: Check out the target at its pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.run.outputs.target_repo }}
+          ref: ${{ steps.run.outputs.target_sha }}
+          path: ${{ steps.run.outputs.target_name }}
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      # Written to a FILE and executed, never interpolated into a step or piped
+      # through GITHUB_OUTPUT. A build command is routinely multi-line and
+      # routinely contains quotes; both of those corrupt an output variable, and
+      # the corruption reads as a broken build rather than as a broken quoting.
+      - name: Read the preflight config
+        run: |
+          mkdir -p out
+          cfg="abis/cells/${{ matrix.config_name }}.json"
+          cp "$cfg" out/cell-config.source.json
+          # The cell's environment, into the job's. ARCH and CROSS_COMPILE are
+          # read by the kernel's build system and by anything else that honours
+          # them; a build that ignores both is a native build, which is what it
+          # would have been anyway. Written through GITHUB_ENV rather than
+          # spliced into the command, so no shell parses a value.
+          jq -r '(.env // {}) | to_entries[] | "\(.key)=\(.value)"' "$cfg" \
+            >> "$GITHUB_ENV"
+          jq -r '(.apt // []) | join(" ")' "$cfg" > "$RUNNER_TEMP/apt.txt"
+          echo "--- env ---"
+          jq -r '.env // {}' "$cfg"
+          echo "--- apt --- $(cat "$RUNNER_TEMP/apt.txt")"
+
+      # THE CROSS TOOLCHAIN, and the reason 326 of torvalds/linux's 329 cells
+      # are measurable at all. `arch/m68k/configs/` names a target, not a
+      # machine to stand on: the compiler runs natively here and emits foreign
+      # code, which is sound for a licence and lineage question precisely
+      # because the output is never executed (PLAN_BUILD_MATRIX_DISCOVERY §10).
+      #
+      # An architecture with no entry in preflight.ts's table never reaches this
+      # job, so an empty list here means the host compiler is already the right
+      # one — x86_64, or User Mode Linux.
+      - name: Install the cross toolchain
+        run: |
+          pkgs="$(cat "$RUNNER_TEMP/apt.txt")"
+          if [ -z "$pkgs" ]; then
+            echo "host toolchain is the target toolchain; nothing to install"
+            exit 0
+          fi
+          sudo apt-get update -qq
+          # shellcheck disable=SC2086
+          sudo apt-get install -y -qq $pkgs
+          if [ -n "${CROSS_COMPILE:-}" ]; then
+            "${CROSS_COMPILE}gcc" --version | head -1
+          fi
+
+      # THE PROPOSING AGENT, WHERE THE TREE ALREADY IS. Until 2026-09-20 this
+      # ran on the server and PLAN_REMOTE_RUN D9 said it must — the customer's
+      # source could not leave their perimeter. Their own GitHub instance put
+      # the runner inside that perimeter, so the agent reads the checkout
+      # instead of a snapshot over SQL. The provenance argument is answered
+      # rather than dropped: this tree is a checkout at a PINNED SHA, which is
+      # the commit by git's own integrity.
+      #
+      # NOT `gh aw`. Build_Matrix §14.3 item 4 — the Copilot engine behind it is
+      # a cloud feature and is unlikely to run on GHES at all, which is exactly
+      # where this has to work. A plain step talking to the configured gateway
+      # runs on an instance with no marketplace and no Copilot.
+      #
+      # SKIPPED, NEVER FAILED, WITHOUT A KEY. A preflight's first job is to
+      # measure what the build produces; that answer is worth having even where
+      # no gateway is reachable, and failing here would throw it away.
+      - name: Propose the build configuration
+        id: propose
+        continue-on-error: true
+        env:
+          ABIS_AI_API_KEY: ${{ secrets.ABIS_AI_API_KEY }}
+        run: |
+          mkdir -p out
+          if [ -z "${ABIS_AI_API_KEY:-}" ]; then
+            echo '{"proposal":null,"refusal":"no ABIS_AI_API_KEY secret on this repository","citations":[]}' \
+              > out/proposal.json
+            echo "::warning::no ABIS_AI_API_KEY secret — the build still runs, no configuration was proposed"
+            exit 0
+          fi
+          node abis/bin/propose.mjs \
+            --repo "$GITHUB_WORKSPACE/${{ steps.run.outputs.target_name }}" \
+            --out out \
+            --model "${ABIS_AI_MODEL:-gpt-5}" \
+            --base-url "${ABIS_AI_BASE_URL:-https://api.openai.com/v1}"
+
+      # THE CONFIG FIRST, THE AGENT SECOND, and this order is the whole point of
+      # the split. A package prepared from a server-side proposal already names
+      # its build command and that one wins — the preflight is then measuring
+      # the command a run would actually use, which is the only thing worth
+      # measuring. An empty one means the server had nothing to offer (D9a:
+      # torvalds/linux, where its agent may never settle), and the proposal the
+      # step above just made is what fills the gap.
+      #
+      # Exit 97 rather than a silent skip: "neither the server nor the runner
+      # could say how this is built" is a finding, and it has to reach
+      # preflight.json as one.
+      - name: Resolve the build command
+        run: |
+          cfg="abis/cells/${{ matrix.config_name }}.json"
+          jq -r '.build_cmd // ""' "$cfg" > "$RUNNER_TEMP/build_cmd.sh"
+          src=config
+          if [ ! -s "$RUNNER_TEMP/build_cmd.sh" ] \
+             || [ -z "$(tr -d '[:space:]' < "$RUNNER_TEMP/build_cmd.sh")" ]; then
+            src=runner-proposal
+            jq -r '.proposal.build_cmd // ""' out/proposal.json \
+              > "$RUNNER_TEMP/build_cmd.sh" 2>/dev/null || true
+          fi
+          if [ -z "$(tr -d '[:space:]' < "$RUNNER_TEMP/build_cmd.sh")" ]; then
+            printf '%s\n' \
+              'echo "no build command: the config carried none and the agent proposed none" >&2' \
+              'exit 97' > "$RUNNER_TEMP/build_cmd.sh"
+            src=none
+          fi
+          echo "BUILD_CMD_SOURCE=$src" >> "$GITHUB_ENV"
+          echo "--- build_cmd (from $src) ---"
+          cat "$RUNNER_TEMP/build_cmd.sh"
+
+      - name: Record the tree before the build
+        working-directory: ${{ steps.run.outputs.target_name }}
+        run: |
+          find . -type f -print | LC_ALL=C sort > "$RUNNER_TEMP/tree.before"
+          echo "before: $(wc -l < "$RUNNER_TEMP/tree.before") files"
+
+      # continue-on-error for the reason every other job here gives: a build
+      # that failed is the answer to a question somebody asked, and the steps
+      # that retain it have to run either way. A preflight whose build does not
+      # compile is a finding worth more than the glob it was looking for.
+      - name: Run the build command
+        id: build
+        continue-on-error: true
+        working-directory: ${{ steps.run.outputs.target_name }}
+        run: |
+          started=$(date +%s)
+          set +e
+          bash "$RUNNER_TEMP/build_cmd.sh"
+          code=$?
+          set -e
+          echo "$code" > "$RUNNER_TEMP/exit_code"
+          echo "$(( $(date +%s) - started ))" > "$RUNNER_TEMP/duration_s"
+          echo "build_cmd exited $code"
+
+      # `comm -13` is the whole measurement: files present after and absent
+      # before. Capped, because a C build creates an object file per source and
+      # a hundred thousand JSON entries is not evidence anybody reads — the
+      # uncapped COUNT is recorded next to the capped list so the truncation is
+      # visible rather than silent.
+      - name: Record what the build created
+        if: always()
+        working-directory: ${{ steps.run.outputs.target_name }}
+        run: |
+          find . -type f -print | LC_ALL=C sort > "$RUNNER_TEMP/tree.after"
+          comm -13 "$RUNNER_TEMP/tree.before" "$RUNNER_TEMP/tree.after" \
+            > "$RUNNER_TEMP/created" || true
+          total=$(wc -l < "$RUNNER_TEMP/created" | tr -d ' ')
+          head -n 20000 "$RUNNER_TEMP/created" > "$RUNNER_TEMP/created.capped"
+          : > "$RUNNER_TEMP/created.tsv"
+          while IFS= read -r p; do
+            sz=$(wc -c < "$p" 2>/dev/null | tr -d ' ')
+            printf '%s\t%s\n' "${sz:-0}" "${p#./}" >> "$RUNNER_TEMP/created.tsv"
+          done < "$RUNNER_TEMP/created.capped"
+          jq -Rn '[inputs | split("\t") | {size: (.[0] | tonumber), path: .[1]}]' \
+            "$RUNNER_TEMP/created.tsv" > "$RUNNER_TEMP/created.json"
+          echo "created: $total files"
+          echo "PREFLIGHT_CREATED_TOTAL=$total" >> "$GITHUB_ENV"
+
+      - name: Write out/preflight.json
+        if: always()
+        run: |
+          mkdir -p out
+          [ -f "$RUNNER_TEMP/exit_code" ] || echo 99 > "$RUNNER_TEMP/exit_code"
+          [ -f "$RUNNER_TEMP/duration_s" ] || echo 0 > "$RUNNER_TEMP/duration_s"
+          [ -f "$RUNNER_TEMP/created.json" ] || echo '[]' > "$RUNNER_TEMP/created.json"
+          code=$(cat "$RUNNER_TEMP/exit_code")
+          jq -n \
+            --arg abis_run_id "${{ inputs.abis_run_id }}" \
+            --arg content_key "${{ matrix.content_key }}" \
+            --arg config_name "${{ matrix.config_name }}" \
+            --arg os "${{ matrix.os }}" \
+            --arg arch "${{ matrix.arch }}" \
+            --arg runner "${{ matrix.runner }}" \
+            --arg image_os "${ImageOS:-unknown}" \
+            --arg image_version "${ImageVersion:-unknown}" \
+            --argjson exit_code "$code" \
+            --argjson duration_s "$(cat "$RUNNER_TEMP/duration_s")" \
+            --argjson created_total "${PREFLIGHT_CREATED_TOTAL:-0}" \
+            --arg build_cmd_source "${BUILD_CMD_SOURCE:-unknown}" \
+            --slurpfile created "$RUNNER_TEMP/created.json" \
+            '{abis_run_id: $abis_run_id, content_key: $content_key,
+              config_name: $config_name, os: $os, arch: $arch, runner: $runner,
+              image_os: $image_os, image_version: $image_version,
+              build_ok: ($exit_code == 0), exit_code: $exit_code,
+              build_cmd_source: $build_cmd_source,
+              duration_s: $duration_s, created_total: $created_total,
+              truncated: ($created_total > 20000), created: $created[0]}' \
+            > out/preflight.json
+          echo "$code" > out/exit_code
+          jq '{build_ok, exit_code, duration_s, created_total, truncated}' out/preflight.json
+
+      - name: Assemble the evidence bundle
+        if: always()
+        run: |
+          mkdir -p out
+          [ -f out/exit_code ] || echo 99 > out/exit_code
+          tar -czf bundle.tar.gz out
+          sha256sum bundle.tar.gz
+
+      - name: Upload the evidence bundle
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bundle-${{ matrix.config_name }}
+          path: bundle.tar.gz
+          compression-level: 0
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Attest the bundle
+        if: always()
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: bundle.tar.gz
+
+      - name: Report the preflight's exit code
+        if: always()
+        run: |
+          code="$(cat out/exit_code)"
+          if [ "$code" = "0" ]; then
+            echo "::notice::preflight built — $PREFLIGHT_CREATED_TOTAL files created"
+          else
+            echo "::error::build_cmd exited $code; no artifact set was observed"
+            exit 1
+          fi
