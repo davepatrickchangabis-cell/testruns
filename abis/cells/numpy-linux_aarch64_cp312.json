@@ -1,0 +1,98 @@
+{
+  "id": "numpy-linux_aarch64_cp312",
+  "out": "out",
+  "name": "numpy",
+  "repo": "numpy",
+  "sbom": {
+    "full": true,
+    "cdxgen": "cdxgen",
+    "technology": "python",
+    "constraints": null,
+    "requirements": "requirements/build_requirements.txt",
+    "spec_version": "1.6"
+  },
+  "build": {
+    "keep": [
+      "meson_cpu/x86/*.c"
+    ],
+    "adapter": "meson",
+    "test_cmd": "bash -lc 'set -e; python -m pip install -U pytest; python -c '\\''import sys, glob; sys.path[:0] = glob.glob(\"build-install/lib*/python*/site-packages\"); import numpy, sys as s; s.exit(numpy.test() is False)'\\'''",
+    "artifacts": [
+      "build-install/**/site-packages/numpy/**/*.so"
+    ],
+    "build_cmd": "bash -lc 'set -e; git submodule update --init --recursive; python -m pip install -U pip meson ninja Cython; meson setup build --prefix=\"$PWD/build-install\" --libdir=lib -Dallow-noblas=true -Ddisable-svml=true -Ddisable-highway=true -Ddisable-intel-sort=true; meson compile -C build; meson install -C build'",
+    "build_dir": "build",
+    "clean_cmd": "bash -lc 'rm -rf build build-install'",
+    "install_dir": "build-install",
+    "test_artifacts": []
+  },
+  "source": "https://github.com/numpy/numpy",
+  "config_name": "numpy-linux_aarch64_cp312",
+  "scan_processes": 2,
+  "project_license": "BSD-3-Clause",
+  "component_prefixes": [
+    [
+      "benchmarks",
+      "benchmarks",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "branding",
+      "branding",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "doc",
+      "docs",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "meson_cpu",
+      "meson_cpu",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "numpy",
+      "numpy",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "pixi-packages",
+      "pixi-packages",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "requirements",
+      "requirements",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "tools",
+      "tools",
+      {
+        "origin": "first-party"
+      }
+    ],
+    [
+      "vendored-meson",
+      "meson (submodule)",
+      {
+        "origin": "third-party"
+      }
+    ]
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "run_id": "739381e0-c76e-42cf-b8bc-b2591430d0d4",
+  "prepare_id": "1d62e9b8-e0f8-4b76-8a57-d76f8b1aeafb",
+  "target": {
+    "owner": "numpy",
+    "repo": "numpy",
+    "sha": "98197be7070a106e60af01e26bd481df97b6aa37"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:697de6fad776b466993b0a6b6dfe200c1de4405d6ea7532531672c7bcbd4157b"
+  },
+  "prepared_at": "Sun Sep 20 2026 21:35:28 GMT+0200 (Central European Summer Time)"
+}
