@@ -1,0 +1,14 @@
+{
+  "run_id": "62d324e4-7266-457f-93f6-17897502b5cc",
+  "prepare_id": "dfeb855c-80a1-418f-a13c-2e48f7bd6d89",
+  "target": {
+    "owner": "notepad-plus-plus",
+    "repo": "notepad-plus-plus",
+    "sha": "3b074e94b7b40e03fcc75c622ebe494813346881"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:697de6fad776b466993b0a6b6dfe200c1de4405d6ea7532531672c7bcbd4157b"
+  },
+  "prepared_at": "2026-09-20T14:35:59.807Z"
+}

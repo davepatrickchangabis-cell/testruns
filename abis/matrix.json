@@ -1,0 +1,15 @@
+{
+  "include": [],
+  "declared": [
+    {
+      "content_key": "b2c146f33f1fd58a00cc3c6dc34f9415be8de921f26a1dc7f31660c0059442f8",
+      "config_name": "notepad-plus-plus-declared",
+      "runner": "ubuntu-latest",
+      "os": "linux",
+      "arch": "x86_64",
+      "libc": null,
+      "python": "3.12"
+    }
+  ],
+  "preflight": []
+}
