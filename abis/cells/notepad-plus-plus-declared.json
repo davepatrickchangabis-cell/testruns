@@ -1,0 +1,14 @@
+{
+  "id": "notepad-plus-plus-declared",
+  "name": "notepad-plus-plus",
+  "repo": "notepad-plus-plus",
+  "source": "https://github.com/notepad-plus-plus/notepad-plus-plus",
+  "out": "out",
+  "sbom": {
+    "technology": "auto",
+    "cdxgen": "cdxgen",
+    "spec_version": "1.7",
+    "requirements": null,
+    "full": false
+  }
+}
