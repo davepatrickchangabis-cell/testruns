@@ -1,0 +1,14 @@
+{
+  "run_id": "4072dc62-3d15-4ac5-81fa-4830e298f5b8",
+  "prepare_id": "a394ed9f-68e5-4f6a-9597-f1a6e80733db",
+  "target": {
+    "owner": "flutter",
+    "repo": "flutter",
+    "sha": "19946f91c8d9de18a4674460d015229cc0b2534f"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:697de6fad776b466993b0a6b6dfe200c1de4405d6ea7532531672c7bcbd4157b"
+  },
+  "prepared_at": "2026-09-21T09:28:54.338Z"
+}
