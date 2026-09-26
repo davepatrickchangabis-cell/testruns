@@ -1,0 +1,15 @@
+{
+  "include": [],
+  "declared": [
+    {
+      "content_key": "7da1af02845e105770ee151c98e5fbc04efe2ca11553dcd56f9c76c46324591f",
+      "config_name": "avenOS-declared",
+      "runner": "ubuntu-latest",
+      "os": "linux",
+      "arch": "x86_64",
+      "libc": null,
+      "python": "3.12"
+    }
+  ],
+  "preflight": []
+}

@@ -1,0 +1,14 @@
+{
+  "run_id": "0404432a-324e-40bb-a85a-820f3d2dd59a",
+  "prepare_id": "3cb09113-0bc8-4a5e-ae9b-fcfaf84f9fe8",
+  "target": {
+    "owner": "MyAvenCEO",
+    "repo": "avenOS",
+    "sha": "8310bc3fbb31453323b38af70425793af515d752"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:697de6fad776b466993b0a6b6dfe200c1de4405d6ea7532531672c7bcbd4157b"
+  },
+  "prepared_at": "2026-09-26T09:17:02.441Z"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "avenOS-declared",
+  "name": "avenOS",
+  "repo": "avenOS",
+  "source": "https://github.com/MyAvenCEO/avenOS",
+  "out": "out",
+  "sbom": {
+    "technology": "auto",
+    "cdxgen": "cdxgen",
+    "spec_version": "1.7",
+    "requirements": null,
+    "full": false
+  }
+}
