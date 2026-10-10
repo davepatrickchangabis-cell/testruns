@@ -1,0 +1,16 @@
+[
+  {
+    "name": "Modify resource.h N++ version to avoid confusion",
+    "run": "$content = Get-Content -Path 'resource.h'\n$newContent = $content -replace 'TEXT\\(\\\"Notepad\\+\\+ v.*\\\"\\)', 'TEXT(\"Notepad++ GH_BUILD\")'\n$newContent | Set-Content -Path 'resource.h'",
+    "shell": "pwsh",
+    "phase": "build",
+    "workdir": "PowerEditor/src"
+  },
+  {
+    "name": "MSBuild of n++ exe",
+    "run": "msbuild notepadPlus.sln /m /p:configuration=\"Debug\" /p:platform=\"ARM64\"",
+    "shell": "pwsh",
+    "phase": "build",
+    "workdir": "PowerEditor/visual.net"
+  }
+]

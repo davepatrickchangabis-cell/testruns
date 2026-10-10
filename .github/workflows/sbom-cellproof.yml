@@ -1,0 +1,107 @@
+{
+  "name": "abis prove cell",
+  "run-name": "abis ${{ inputs.abis_run_id }}",
+  "on": {
+    "workflow_dispatch": {
+      "inputs": {
+        "abis_run_id": {
+          "description": "ABIS run id. Everything else is in this file.",
+          "required": true,
+          "type": "string"
+        }
+      }
+    }
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "concurrency": {
+    "group": "abis-${{ inputs.abis_run_id }}",
+    "cancel-in-progress": true
+  },
+  "jobs": {
+    "cell": {
+      "name": "cell (41de0fa1228efcb363a2949db6e2acba17865c0983542ac9853c02cad097b14d, notepad-plus-plus-windows_arm64-41de0fa1228efcb363a2949db6e2acba17865c0983542ac9853c02cad097b14d)",
+      "runs-on": "windows-latest",
+      "timeout-minutes": 180,
+      "steps": [
+        {
+          "name": "Keep line endings as committed",
+          "shell": "bash",
+          "run": "git config --global core.autocrlf false"
+        },
+        {
+          "name": "Check out this run's files",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "ref": "${{ github.ref }}",
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Check out the target at its pinned commit",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "repository": "notepad-plus-plus/notepad-plus-plus",
+            "ref": "5ee7a765e919a29f49cd65484568f5ce1c461484",
+            "path": "notepad-plus-plus",
+            "submodules": "recursive",
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Set up Python for the scanner",
+          "uses": "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+          "with": {
+            "python-version": "3.12"
+          }
+        },
+        {
+          "id": "abis_gate",
+          "name": "Prove the checkout is the snapshot and the scanner is the pinned one",
+          "shell": "python",
+          "env": {
+            "ABIS_SPEC": "{\"run_id\":\"6d9b9075-1d09-4884-8bca-aa457cd33275\",\"build_id\":\"6f8c6943-fd29-4165-a1c2-46fb14932646\",\"content_key\":\"41de0fa1228efcb363a2949db6e2acba17865c0983542ac9853c02cad097b14d\",\"config_name\":\"notepad-plus-plus-windows_arm64-41de0fa1228efcb363a2949db6e2acba17865c0983542ac9853c02cad097b14d\",\"commit\":\"5ee7a765e919a29f49cd65484568f5ce1c461484\",\"tree\":\"3537f6a542f80020d91b4bc58bb65631b9c6a04d\",\"target\":\"notepad-plus-plus\",\"repo_id\":\"notepad-plus-plus\",\"repo_name\":\"notepad-plus-plus\",\"buildscan_sha256\":\"01ff865da989187efda76e461cc97a5f565e0deadbcb38c1d7a946fd7f1f4c21\",\"uses_ids\":[\"u1\"],\"step6_artifacts\":[{\"path\":\"PowerEditor/visual.net/ARM64/Debug/Notepad++.exe\",\"bytes\":19589120,\"sha256\":\"eac3dd37a76f5af3b044e56cd5403ab34c5131159eaed8316517623370a9b7a3\",\"pattern\":\"PowerEditor/visual.net/ARM64/Debug/Notepad++.exe\"}]}"
+          },
+          "run": "import hashlib, json, os, subprocess, sys\nspec = json.loads(os.environ[\"ABIS_SPEC\"])\nws = os.environ[\"GITHUB_WORKSPACE\"]\ntmp = os.path.join(os.environ[\"RUNNER_TEMP\"], \"abis\")\nos.makedirs(tmp, exist_ok=True)\ntree = subprocess.run([\"git\", \"-C\", os.path.join(ws, spec[\"target\"]), \"rev-parse\", \"HEAD^{tree}\"],\n                      capture_output=True, text=True).stdout.strip()\nh = hashlib.sha256()\nwith open(os.path.join(ws, \"abis\", \"bin\", \"abis-buildscan.pyz\"), \"rb\") as f:\n    for chunk in iter(lambda: f.read(1 << 20), b\"\"):\n        h.update(chunk)\ngate = {\"tree\": tree, \"snapshot_tree\": spec[\"tree\"],\n        \"buildscan_sha256\": h.hexdigest(), \"pinned_buildscan_sha256\": spec[\"buildscan_sha256\"]}\nwith open(os.path.join(tmp, \"gate.json\"), \"w\") as f:\n    json.dump(gate, f, indent=2)\nprint(json.dumps(gate, indent=2))\nif tree != spec[\"tree\"]:\n    print(\"::error::the checkout's tree \" + tree + \" is not the snapshot's \" + spec[\"tree\"])\n    sys.exit(12)\nif gate[\"buildscan_sha256\"] != spec[\"buildscan_sha256\"]:\n    print(\"::error::abis-buildscan.pyz is not the pinned one\")\n    sys.exit(10)\n"
+        },
+        {
+          "id": "u1",
+          "name": "[recipe] Add msbuild to PATH",
+          "uses": "microsoft/setup-msbuild@v3"
+        },
+        {
+          "id": "abis_prove",
+          "name": "Traced build, reduction, rebuild (abis-buildscan)",
+          "shell": "python",
+          "env": {
+            "ABIS_SPEC": "{\"run_id\":\"6d9b9075-1d09-4884-8bca-aa457cd33275\",\"build_id\":\"6f8c6943-fd29-4165-a1c2-46fb14932646\",\"content_key\":\"41de0fa1228efcb363a2949db6e2acba17865c0983542ac9853c02cad097b14d\",\"config_name\":\"notepad-plus-plus-windows_arm64-41de0fa1228efcb363a2949db6e2acba17865c0983542ac9853c02cad097b14d\",\"commit\":\"5ee7a765e919a29f49cd65484568f5ce1c461484\",\"tree\":\"3537f6a542f80020d91b4bc58bb65631b9c6a04d\",\"target\":\"notepad-plus-plus\",\"repo_id\":\"notepad-plus-plus\",\"repo_name\":\"notepad-plus-plus\",\"buildscan_sha256\":\"01ff865da989187efda76e461cc97a5f565e0deadbcb38c1d7a946fd7f1f4c21\",\"uses_ids\":[\"u1\"],\"step6_artifacts\":[{\"path\":\"PowerEditor/visual.net/ARM64/Debug/Notepad++.exe\",\"bytes\":19589120,\"sha256\":\"eac3dd37a76f5af3b044e56cd5403ab34c5131159eaed8316517623370a9b7a3\",\"pattern\":\"PowerEditor/visual.net/ARM64/Debug/Notepad++.exe\"}]}"
+          },
+          "run": "import json, os, subprocess, sys\nfor stream in (sys.stdout, sys.stderr):\n    stream.reconfigure(encoding=\"utf-8\", errors=\"replace\")\nspec = json.loads(os.environ[\"ABIS_SPEC\"])\nws = os.environ[\"GITHUB_WORKSPACE\"]\ntmp = os.path.join(os.environ[\"RUNNER_TEMP\"], \"abis\")\nos.makedirs(tmp, exist_ok=True)\nproof = os.path.join(ws, \"abis\", \"proof\")\nenv = dict(os.environ)\nenv.update({\"ABIS_PYTHON\": sys.executable, \"ABIS_RECIPE\": os.path.join(proof, \"recipe.py\"),\n            \"ABIS_RECIPE_STEPS\": os.path.join(proof, \"steps.json\"), \"PYTHONIOENCODING\": \"utf-8\"})\ncmd = [sys.executable, os.path.join(ws, \"abis\", \"bin\", \"abis-buildscan.pyz\"),\n       \"--repo\", os.path.join(ws, spec[\"target\"]), \"--repo-id\", spec[\"repo_id\"],\n       \"--repo-name\", spec[\"repo_name\"], \"--config-name\", spec[\"config_name\"],\n       \"--external-config\", os.path.join(proof, \"config.json\"),\n       \"--commit\", spec[\"commit\"], \"--no-cache\", \"--out\", os.path.join(tmp, \"scan\")]\nprint(\"$ \" + \" \".join(cmd), flush=True)\nwith open(os.path.join(tmp, \"buildscan.log\"), \"w\", encoding=\"utf-8\") as log:\n    p = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)\n    for raw in p.stdout:\n        line = raw.decode(\"utf-8\", \"replace\")\n        sys.stdout.write(line)\n        log.write(line)\n    rc = p.wait()\nwith open(os.path.join(tmp, \"exit_code\"), \"w\") as f:\n    f.write(str(rc))\nprint(\"abis-buildscan exited %d\" % rc, flush=True)\nsys.exit(rc)\n"
+        },
+        {
+          "name": "Pack the evidence",
+          "if": "always()",
+          "shell": "python",
+          "env": {
+            "ABIS_SPEC": "{\"run_id\":\"6d9b9075-1d09-4884-8bca-aa457cd33275\",\"build_id\":\"6f8c6943-fd29-4165-a1c2-46fb14932646\",\"content_key\":\"41de0fa1228efcb363a2949db6e2acba17865c0983542ac9853c02cad097b14d\",\"config_name\":\"notepad-plus-plus-windows_arm64-41de0fa1228efcb363a2949db6e2acba17865c0983542ac9853c02cad097b14d\",\"commit\":\"5ee7a765e919a29f49cd65484568f5ce1c461484\",\"tree\":\"3537f6a542f80020d91b4bc58bb65631b9c6a04d\",\"target\":\"notepad-plus-plus\",\"repo_id\":\"notepad-plus-plus\",\"repo_name\":\"notepad-plus-plus\",\"buildscan_sha256\":\"01ff865da989187efda76e461cc97a5f565e0deadbcb38c1d7a946fd7f1f4c21\",\"uses_ids\":[\"u1\"],\"step6_artifacts\":[{\"path\":\"PowerEditor/visual.net/ARM64/Debug/Notepad++.exe\",\"bytes\":19589120,\"sha256\":\"eac3dd37a76f5af3b044e56cd5403ab34c5131159eaed8316517623370a9b7a3\",\"pattern\":\"PowerEditor/visual.net/ARM64/Debug/Notepad++.exe\"}]}",
+            "ABIS_STEPS": "${{ toJSON(steps) }}"
+          },
+          "run": "import csv, hashlib, json, os, shutil, tarfile, zipfile\nspec = json.loads(os.environ[\"ABIS_SPEC\"])\ntry:\n    steps = json.loads(os.environ.get(\"ABIS_STEPS\") or \"{}\")\nexcept ValueError:\n    steps = {}\nws = os.environ[\"GITHUB_WORKSPACE\"]\ntmp = os.path.join(os.environ[\"RUNNER_TEMP\"], \"abis\")\nout = os.path.join(tmp, \"out\")\nif os.path.isdir(out):\n    shutil.rmtree(out)\nos.makedirs(os.path.join(out, \"proof\"))\n\n\ndef sha(p):\n    h = hashlib.sha256()\n    with open(p, \"rb\") as f:\n        for chunk in iter(lambda: f.read(1 << 20), b\"\"):\n            h.update(chunk)\n    return h.hexdigest()\n\n\ndef load(p):\n    try:\n        with open(p, encoding=\"utf-8\") as f:\n            return json.load(f)\n    except (OSError, ValueError):\n        return None\n\n\norder = [\"abis_gate\"] + spec[\"uses_ids\"] + [\"abis_prove\"]\noutcomes = {i: (steps.get(i) or {}).get(\"outcome\") for i in order}\nfailed = next((i for i in order if outcomes[i] == \"failure\"), None)\ntry:\n    with open(os.path.join(tmp, \"exit_code\")) as f:\n        exit_code = int(f.read().strip())\nexcept (OSError, ValueError):\n    exit_code = None\n\nfor name in (\"config.json\", \"steps.json\", \"keep.json\"):\n    src = os.path.join(ws, \"abis\", \"proof\", name)\n    if os.path.isfile(src):\n        shutil.copy2(src, os.path.join(out, \"proof\", name))\nfor name in (\"buildscan.log\", \"gate.json\"):\n    src = os.path.join(tmp, name)\n    if os.path.isfile(src):\n        shutil.copy2(src, os.path.join(out, name))\n\n# buildscan writes to <out>/<repo dir>/. The reduced bundle is a copy of\n# snapshot files, so it travels as a manifest, not as bytes; the raw MSBuild\n# tracking logs travel as one zip rather than as hundreds of files.\nscan = os.path.join(tmp, \"scan\")\nrun_dir = None\nif os.path.isdir(scan):\n    run_dir = next((os.path.join(scan, d) for d in sorted(os.listdir(scan))\n                    if os.path.isdir(os.path.join(scan, d))), None)\nlineage = os.path.join(out, \"lineage\")\nos.makedirs(lineage, exist_ok=True)\ntlogs = None\nif run_dir:\n    for dirpath, dirnames, filenames in os.walk(run_dir):\n        if dirpath == run_dir:\n            dirnames[:] = [d for d in dirnames if d not in (\"reduced-bundle\", \"content\")]\n        for fn in filenames:\n            p = os.path.join(dirpath, fn)\n            rel = os.path.relpath(p, run_dir).replace(os.sep, \"/\")\n            if rel.startswith(\"evidence/tlogs/\"):\n                if tlogs is None:\n                    os.makedirs(os.path.join(lineage, \"evidence\"), exist_ok=True)\n                    tlogs = zipfile.ZipFile(os.path.join(lineage, \"evidence\", \"tlogs.zip\"), \"w\", zipfile.ZIP_DEFLATED)\n                tlogs.write(p, rel[len(\"evidence/tlogs/\"):])\n                continue\n            dst = os.path.join(lineage, *rel.split(\"/\"))\n            os.makedirs(os.path.dirname(dst), exist_ok=True)\n            shutil.copy2(p, dst)\nif tlogs is not None:\n    tlogs.close()\n\nkept = None\nif run_dir:\n    bundle = os.path.join(run_dir, \"reduced-bundle\")\n    expected = os.path.join(run_dir, \"evidence-verify\", \"expected-files.txt\")\n    if os.path.isfile(expected):\n        with open(expected, encoding=\"utf-8\") as f:\n            listed = [line.strip() for line in f if line.strip()]\n        rows = []\n        for p in listed:\n            here = os.path.isfile(p)\n            rows.append([os.path.relpath(p, bundle).replace(os.sep, \"/\"), sha(p) if here else \"\",\n                         os.path.getsize(p) if here else \"\", \"true\" if here else \"false\"])\n        kept = len(rows)\n        with open(os.path.join(lineage, \"reduced-bundle-manifest.csv\"), \"w\", newline=\"\", encoding=\"utf-8\") as f:\n            w = csv.writer(f)\n            w.writerow([\"path\", \"sha256_after_rebuild\", \"bytes\", \"present\"])\n            w.writerows(sorted(rows))\n\nrid = spec[\"repo_id\"]\nverify = load(os.path.join(lineage, rid + \"-verify-report.json\")) or {}\nstatus = load(os.path.join(lineage, rid + \"-lineage-status.json\")) or {}\nsummary = load(os.path.join(lineage, rid + \"-lineage-summary.json\")) or {}\n\n# By category, because in_build=true covers both what ships (product) and\n# what was kept as declared build infrastructure (build-infra).\ninventory = None\ninv = os.path.join(lineage, rid + \"-lineage-inventory.csv\")\nif os.path.isfile(inv):\n    inventory = {\"rows\": 0, \"categories\": {}}\n    with open(inv, newline=\"\", encoding=\"utf-8\") as f:\n        for r in csv.DictReader(f):\n            inventory[\"rows\"] += 1\n            c = inventory[\"categories\"].setdefault(r.get(\"category\") or \"unknown\", {\"in_build\": 0, \"not_in_build\": 0})\n            c[\"in_build\" if str(r.get(\"in_build\")).lower() == \"true\" else \"not_in_build\"] += 1\n\ndef key(p):\n    return p.replace(\"\\\\\", \"/\").lower()\n\n\ndef bare(h):\n    \"\"\"Manifest §3: bare lowercase hex. buildscan writes 'sha256:<hex>'; anything else is no hash.\"\"\"\n    if not isinstance(h, str):\n        return None\n    h = h.strip().lower()\n    if h.startswith(\"sha256:\"):\n        h = h[len(\"sha256:\"):]\n    return h if len(h) == 64 and all(c in \"0123456789abcdef\" for c in h) else None\n\n\nstep6 = {key(a[\"path\"]): a for a in spec[\"step6_artifacts\"]}\nartifacts, seen = [], set()\nfor rel, a in sorted((verify.get(\"artifacts\") or {}).items()):\n    s6 = step6.get(key(rel))\n    seen.add(key(rel))\n    artifacts.append({\"path\": rel, \"step6_sha256\": bare(s6[\"sha256\"]) if s6 else None,\n                      \"full_sha256\": bare(a.get(\"canonical\")), \"reduced_sha256\": bare(a.get(\"reduced\")),\n                      \"identical\": a.get(\"identical\")})\nfor key, s6 in sorted(step6.items()):\n    if key not in seen:\n        artifacts.append({\"path\": s6[\"path\"], \"step6_sha256\": bare(s6[\"sha256\"]), \"full_sha256\": None,\n                          \"reduced_sha256\": None, \"identical\": None})\n\nfiles = []\nfor dirpath, _, filenames in os.walk(out):\n    for fn in filenames:\n        p = os.path.join(dirpath, fn)\n        files.append({\"path\": \"out/\" + os.path.relpath(p, out).replace(os.sep, \"/\"), \"bytes\": os.path.getsize(p)})\nresult = {\n    \"schema\": \"abis-cellproof-result/1\", \"run_id\": spec[\"run_id\"], \"build_id\": spec[\"build_id\"],\n    \"content_key\": spec[\"content_key\"], \"config_name\": spec[\"config_name\"], \"repo_id\": rid,\n    \"steps\": outcomes, \"failed_step\": failed, \"exit_code\": exit_code,\n    \"status\": status.get(\"status\"), \"reason\": status.get(\"reason\"), \"rescan\": status.get(\"rescan\"),\n    \"tool\": status.get(\"tool\") or summary.get(\"tool\"),\n    \"verify\": {k: verify.get(k) for k in (\"build_ok\", \"tests_ok\", \"qualified\", \"bit_identical\")},\n    \"verify_error\": (verify.get(\"error\") or \"\")[-2000:] or None,\n    \"artifacts\": artifacts,\n    \"counts\": {\"files_total_internal\": summary.get(\"files_total_internal\"),\n               \"files_in_product\": summary.get(\"files_in_product\"),\n               \"files_removed\": summary.get(\"files_removed\"),\n               \"reduced_bundle_files\": kept, \"inventory\": inventory},\n    \"files\": sorted(files, key=lambda f: f[\"path\"]),\n}\nwith open(os.path.join(out, \"result.json\"), \"w\", encoding=\"utf-8\") as f:\n    json.dump(result, f, indent=2)\nwith tarfile.open(os.path.join(tmp, \"bundle.tar.gz\"), \"w:gz\") as t:\n    t.add(out, arcname=\"out\")\nprint(json.dumps({k: result[k] for k in (\"exit_code\", \"status\", \"verify\", \"artifacts\", \"counts\")}, indent=2))\n"
+        },
+        {
+          "name": "Upload the evidence bundle",
+          "if": "always()",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "bundle-41de0fa1228efcb363a2949db6e2acba17865c0983542ac9853c02cad097b14d",
+            "path": "${{ runner.temp }}/abis/bundle.tar.gz",
+            "compression-level": 0,
+            "retention-days": 90,
+            "if-no-files-found": "error"
+          }
+        }
+      ]
+    }
+  }
+}
