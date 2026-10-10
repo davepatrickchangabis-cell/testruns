@@ -1,0 +1,8 @@
+[
+  {
+    "name": "Build NumPy 2.5.3 wheel for cp312 musllinux_1_2 aarch64",
+    "run": "set -eux\n# Pull musllinux aarch64 image\ndocker pull quay.io/pypa/musllinux_1_2_aarch64:latest\n# Build inside container and repair to musllinux_1_2 tag\ndocker run --rm \\\n  -e NPY_BLAS_ORDER=openblas \\\n  -e NPY_LAPACK_ORDER=openblas \\\n  -v \"$PWD:/io\" -w /io \\\n  quay.io/pypa/musllinux_1_2_aarch64:latest \\\n  /bin/sh -eux -c '\n    apk update && apk add --no-cache build-base gfortran openblas-dev pkgconf patchelf\n    PYBIN=\"/opt/python/cp312-cp312/bin/python\"\n    \"$PYBIN\" -m pip install -U pip setuptools wheel \"cython>=3.0\" meson-python ninja build\n    \"$PYBIN\" -m build -w -o /io/dist\n    WHEEL=$(ls /io/dist/numpy-*-cp312-*.whl | head -n1)\n    auditwheel repair --plat musllinux_1_2_aarch64 -w /io/dist \"$WHEEL\"\n  '",
+    "shell": "bash",
+    "phase": "build"
+  }
+]
