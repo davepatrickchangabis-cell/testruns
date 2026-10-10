@@ -1,0 +1,110 @@
+[
+  {
+    "id": "musllinux_1_2_aarch64",
+    "os": "linux",
+    "arch": "aarch64",
+    "libc": "musl",
+    "libc_baseline": "1.2",
+    "runner": "ubuntu-24.04-arm",
+    "image": "quay.io/pypa/musllinux_1_2_aarch64@sha256:70a81491cfd91b4ebfc4f1b0bcd8e5da04d78a104cb8dc799f0b071034343df4",
+    "oci_platform": "linux/arm64",
+    "package_manager": "apk",
+    "interpreters": {
+      "cp312": "/opt/python/cp312-cp312/bin/python"
+    },
+    "registry_verification": {
+      "checked_at": "2026-09-20T22:48:38Z",
+      "config_digest": "sha256:d586bb457b58aa508673feebb43d2af92fbc3bf713a61864d42e59b2c8af84c5"
+    },
+    "qualification": "pending",
+    "required_checks": [
+      "platform",
+      "python-abi",
+      "scancode",
+      "libarchive-call",
+      "cdxgen",
+      "traced-compilation"
+    ]
+  },
+  {
+    "id": "musllinux_1_2_x86_64",
+    "os": "linux",
+    "arch": "x86_64",
+    "libc": "musl",
+    "libc_baseline": "1.2",
+    "runner": "ubuntu-24.04",
+    "image": "quay.io/pypa/musllinux_1_2_x86_64@sha256:8f7d1c70a5cfb088d9a9609a2671d7a1ac7cb46ccb19e7ac078ba9dbf2552068",
+    "oci_platform": "linux/amd64",
+    "package_manager": "apk",
+    "interpreters": {
+      "cp312": "/opt/python/cp312-cp312/bin/python"
+    },
+    "registry_verification": {
+      "checked_at": "2026-09-20T22:48:40Z",
+      "config_digest": "sha256:7798fcc05f52e172dec7cbee91c6040d5e618e923fd2e50ae481f85d7c182d94"
+    },
+    "qualification": "pending",
+    "required_checks": [
+      "platform",
+      "python-abi",
+      "scancode",
+      "libarchive-call",
+      "cdxgen",
+      "traced-compilation"
+    ]
+  },
+  {
+    "id": "manylinux_2_28_aarch64",
+    "os": "linux",
+    "arch": "aarch64",
+    "libc": "glibc",
+    "libc_baseline": "2.28",
+    "runner": "ubuntu-24.04-arm",
+    "image": "quay.io/pypa/manylinux_2_28_aarch64@sha256:bbb43f784ce78a454a9e3351b862a12e7ad5c30972e8aeba092da678918bbba9",
+    "oci_platform": "linux/arm64",
+    "package_manager": "dnf",
+    "interpreters": {
+      "cp312": "/opt/python/cp312-cp312/bin/python"
+    },
+    "registry_verification": {
+      "checked_at": "2026-09-20T22:48:41Z",
+      "config_digest": "sha256:9f0599fd1f9b72194ee8ac187360905c89b7a04b701aedc87511d1181466b13b"
+    },
+    "qualification": "pending",
+    "required_checks": [
+      "platform",
+      "python-abi",
+      "scancode",
+      "libarchive-call",
+      "cdxgen",
+      "traced-compilation"
+    ]
+  },
+  {
+    "id": "manylinux_2_28_x86_64",
+    "os": "linux",
+    "arch": "x86_64",
+    "libc": "glibc",
+    "libc_baseline": "2.28",
+    "runner": "ubuntu-24.04",
+    "image": "quay.io/pypa/manylinux_2_28_x86_64@sha256:531d7aa844bbb0c131d4ab011d3db741c4abc8d498cd5ccc86121046f62303b4",
+    "oci_platform": "linux/amd64",
+    "package_manager": "dnf",
+    "interpreters": {
+      "cp312": "/opt/python/cp312-cp312/bin/python"
+    },
+    "registry_verification": {
+      "checked_at": "2026-09-20T22:48:43Z",
+      "config_digest": "sha256:71ceabc56f492092ec70785779d219053c45e88943be489aa92ebad7a37c4c6c"
+    },
+    "qualification": "pending",
+    "required_checks": [
+      "platform",
+      "python-abi",
+      "scancode",
+      "libarchive-call",
+      "cdxgen",
+      "traced-compilation"
+    ]
+  }
+]
