@@ -1,0 +1,32 @@
+{
+  "adapter": "msvc",
+  "build_cmd": "\"%ABIS_PYTHON%\" \"%ABIS_RECIPE%\" build",
+  "test_cmd": "",
+  "clean_cmd": "",
+  "artifacts": [
+    "PowerEditor/visual.net/ARM64/Debug/Notepad++.exe"
+  ],
+  "test_artifacts": [],
+  "keep": [
+    "*.sln",
+    "*.slnx",
+    "*.vcxproj",
+    "*.vcxproj.filters",
+    "*.vcxitems",
+    "*.props",
+    "*.targets",
+    "*.ruleset",
+    "*.def",
+    "*CMakeLists.txt",
+    "*.cmake",
+    "boostregex/boost/version.hpp",
+    "lexilla/src/LexillaVersion.rc",
+    "lexilla/test/unit/Sci.natvis",
+    "PowerEditor/src/langs.model.xml",
+    "PowerEditor/src/NppLibsVersionH-generator.bat",
+    "PowerEditor/src/resource.h",
+    "PowerEditor/src/stylers.model.xml",
+    "scintilla/test/unit/Sci.natvis",
+    "scintilla/win32/ScintRes.rc"
+  ]
+}

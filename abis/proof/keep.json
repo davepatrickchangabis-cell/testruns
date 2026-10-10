@@ -1,0 +1,22 @@
+{
+  "*.sln": "msvc default: a build description no tracer sees being read",
+  "*.slnx": "msvc default: a build description no tracer sees being read",
+  "*.vcxproj": "msvc default: a build description no tracer sees being read",
+  "*.vcxproj.filters": "msvc default: a build description no tracer sees being read",
+  "*.vcxitems": "msvc default: a build description no tracer sees being read",
+  "*.props": "msvc default: a build description no tracer sees being read",
+  "*.targets": "msvc default: a build description no tracer sees being read",
+  "*.ruleset": "msvc default: a build description no tracer sees being read",
+  "*.def": "msvc default: a build description no tracer sees being read",
+  "*CMakeLists.txt": "msvc default: a build description no tracer sees being read",
+  "*.cmake": "msvc default: a build description no tracer sees being read",
+  "boostregex/boost/version.hpp": "named by PowerEditor/src/NppLibsVersionH-generator.bat",
+  "lexilla/src/LexillaVersion.rc": "named by PowerEditor/src/NppLibsVersionH-generator.bat",
+  "lexilla/test/unit/Sci.natvis": "named by lexilla/test/unit/UnitTester.vcxproj",
+  "PowerEditor/src/langs.model.xml": "named by PowerEditor/visual.net/notepadPlus.Cpp.props",
+  "PowerEditor/src/NppLibsVersionH-generator.bat": "named by PowerEditor/src/CMakeLists.txt",
+  "PowerEditor/src/resource.h": "named by recipe step \"Modify resource.h N++ version to avoid confusion\"",
+  "PowerEditor/src/stylers.model.xml": "named by PowerEditor/visual.net/notepadPlus.Cpp.props",
+  "scintilla/test/unit/Sci.natvis": "named by scintilla/test/unit/UnitTester.vcxproj",
+  "scintilla/win32/ScintRes.rc": "named by PowerEditor/src/NppLibsVersionH-generator.bat"
+}
