@@ -1,0 +1,28 @@
+{
+  "name": "abis build cell",
+  "run-name": "abis ${{ inputs.abis_run_id }}",
+  "on": {
+    "workflow_dispatch": {
+      "inputs": {
+        "abis_run_id": {
+          "description": "ABIS run id. Everything else is in this file.",
+          "required": true,
+          "type": "string"
+        }
+      }
+    }
+  },
+  "permissions": {
+    "contents": "read"
+  },
+  "jobs": {
+    "registered": {
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "run": "echo 'Dispatched on an abis/run/<id> ref, the copy on that ref runs; this one only registers the name.'"
+        }
+      ]
+    }
+  }
+}
