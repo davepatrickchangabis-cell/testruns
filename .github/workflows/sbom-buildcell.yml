@@ -15,12 +15,65 @@
   "permissions": {
     "contents": "read"
   },
+  "concurrency": {
+    "group": "abis-${{ inputs.abis_run_id }}",
+    "cancel-in-progress": true
+  },
   "jobs": {
-    "registered": {
-      "runs-on": "ubuntu-latest",
+    "cell": {
+      "name": "cell (0b1a3a903b1e22b3f2be5d1dc0afce24b0ed3a187484f214c46f0da32c6b987b, numpy-linux_aarch64_glibc_cp313-0b1a3a903b1e22b3f2be5d1dc0afce24b0ed3a187484f214c46f0da32c6b987b)",
+      "runs-on": "ubuntu-24.04-arm",
+      "timeout-minutes": 90,
       "steps": [
         {
-          "run": "echo 'Dispatched on an abis/run/<id> ref, the copy on that ref runs; this one only registers the name.'"
+          "name": "Keep line endings as committed",
+          "shell": "bash",
+          "run": "git config --global core.autocrlf false"
+        },
+        {
+          "name": "Check out the target at its pinned commit",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "repository": "numpy/numpy",
+            "ref": "70fa99843c75ae12434805bb4b1b07b94598c5c9",
+            "submodules": "recursive",
+            "persist-credentials": false
+          }
+        },
+        {
+          "id": "abis_gate",
+          "name": "Prove the checkout is the snapshot",
+          "shell": "bash",
+          "run": "tree=$(git rev-parse 'HEAD^{tree}')\necho \"checkout tree $tree\"\nif [ \"$tree\" != \"552bc2460f1ed258886e530855a34477aa0ec92e\" ]; then\n  echo \"::error::the checkout's tree $tree is not the snapshot's 552bc2460f1ed258886e530855a34477aa0ec92e\"\n  exit 12\nfi"
+        },
+        {
+          "id": "s1",
+          "name": "[recipe] Build NumPy 2.5.3 manylinux aarch64 wheel for CPython 3.13",
+          "shell": "bash",
+          "run": "set -euo pipefail\nmkdir -p wheelhouse\nsudo docker run --rm \\\n  -e PIP_DISABLE_PIP_VERSION_CHECK=1 \\\n  -e NPY_NUM_BUILD_JOBS=\"$(nproc)\" \\\n  -v \"$PWD\":/io -w /io \\\n  quay.io/pypa/manylinux_2_28_aarch64:latest bash -lc '\nset -euo pipefail\nPYBIN=/opt/python/cp313-cp313/bin\n$PYBIN/python -m pip install -U pip build meson-python ninja cython\n$PYBIN/python -m build --wheel --outdir /io/wheelhouse\nfor whl in /io/wheelhouse/numpy-2.5.3-*.whl; do\n  auditwheel repair \"$whl\" -w /io/wheelhouse || true\n  if [ -f \"$whl\" ] && ls /io/wheelhouse | grep -q \"$(basename \"$whl\")\"; then\n    :\n  else\n    rm -f \"$whl\" || true\n  fi\ndone\nls -l /io/wheelhouse\n'"
+        },
+        {
+          "name": "Measure what the build produced",
+          "if": "always()",
+          "shell": "python",
+          "env": {
+            "ABIS_STEPS": "${{ toJSON(steps) }}",
+            "ABIS_OUT": "${{ runner.temp }}/abis/out",
+            "ABIS_SPEC": "{\"run_id\":\"17fc106b-ee67-4eed-b34a-749d114dcfcb\",\"content_key\":\"0b1a3a903b1e22b3f2be5d1dc0afce24b0ed3a187484f214c46f0da32c6b987b\",\"config_name\":\"numpy-linux_aarch64_glibc_cp313-0b1a3a903b1e22b3f2be5d1dc0afce24b0ed3a187484f214c46f0da32c6b987b\",\"attempt\":3,\"step_ids\":[\"s1\"],\"artifacts\":[\"wheelhouse/numpy-2.5.3-cp313-cp313-manylinux*_aarch64*.whl\"],\"recipe\":{\"runs_on\":\"ubuntu-24.04-arm\",\"steps\":[{\"name\":\"Build NumPy 2.5.3 manylinux aarch64 wheel for CPython 3.13\",\"run\":\"set -euo pipefail\\nmkdir -p wheelhouse\\nsudo docker run --rm \\\\\\n  -e PIP_DISABLE_PIP_VERSION_CHECK=1 \\\\\\n  -e NPY_NUM_BUILD_JOBS=\\\"$(nproc)\\\" \\\\\\n  -v \\\"$PWD\\\":/io -w /io \\\\\\n  quay.io/pypa/manylinux_2_28_aarch64:latest bash -lc '\\nset -euo pipefail\\nPYBIN=/opt/python/cp313-cp313/bin\\n$PYBIN/python -m pip install -U pip build meson-python ninja cython\\n$PYBIN/python -m build --wheel --outdir /io/wheelhouse\\nfor whl in /io/wheelhouse/numpy-2.5.3-*.whl; do\\n  auditwheel repair \\\"$whl\\\" -w /io/wheelhouse || true\\n  if [ -f \\\"$whl\\\" ] && ls /io/wheelhouse | grep -q \\\"$(basename \\\"$whl\\\")\\\"; then\\n    :\\n  else\\n    rm -f \\\"$whl\\\" || true\\n  fi\\ndone\\nls -l /io/wheelhouse\\n'\",\"shell\":\"bash\"}],\"artifacts\":[\"wheelhouse/numpy-2.5.3-cp313-cp313-manylinux*_aarch64*.whl\"],\"citations\":{\"steps\":\"README.md\"},\"notes\":\"Builds the NumPy 2.5.3 CPython 3.13 aarch64 wheel inside a manylinux_2_28 container and repairs it with auditwheel for manylinux compatibility.\"}}"
+          },
+          "run": "import glob, hashlib, json, os, tarfile\nout = os.environ[\"ABIS_OUT\"]\nos.makedirs(out, exist_ok=True)\nspec = json.loads(os.environ[\"ABIS_SPEC\"])\ntry:\n    steps = json.loads(os.environ.get(\"ABIS_STEPS\") or \"{}\")\nexcept ValueError:\n    steps = {}\norder = [\"abis_gate\"] + spec[\"step_ids\"]\noutcomes = {i: (steps.get(i) or {}).get(\"outcome\") for i in order}\nfailed = next((i for i in order if outcomes[i] == \"failure\"), None)\nws = os.environ.get(\"GITHUB_WORKSPACE\", \".\")\nartifacts, missing = [], []\nfor pattern in spec[\"artifacts\"]:\n    hits = sorted(p for p in glob.glob(os.path.join(ws, pattern), recursive=True) if os.path.isfile(p))\n    if not hits:\n        missing.append(pattern)\n    for p in hits[:200]:\n        h = hashlib.sha256()\n        with open(p, \"rb\") as f:\n            for chunk in iter(lambda: f.read(1 << 20), b\"\"):\n                h.update(chunk)\n        artifacts.append({\"pattern\": pattern, \"path\": os.path.relpath(p, ws).replace(os.sep, \"/\"),\n                          \"sha256\": h.hexdigest(), \"bytes\": os.path.getsize(p)})\nran = all(outcomes[i] == \"success\" for i in order)\nresult = {\"schema\": \"abis-buildcell-result/1\", \"run_id\": spec[\"run_id\"], \"content_key\": spec[\"content_key\"],\n          \"config_name\": spec[\"config_name\"], \"attempt\": spec[\"attempt\"], \"steps\": outcomes,\n          \"failed_step\": failed, \"artifacts\": artifacts, \"missing\": missing,\n          \"built\": ran and bool(artifacts) and not missing}\nwith open(os.path.join(out, \"result.json\"), \"w\") as f:\n    json.dump(result, f, indent=2)\nwith open(os.path.join(out, \"recipe.json\"), \"w\") as f:\n    json.dump(spec[\"recipe\"], f, indent=2)\nwith tarfile.open(os.path.join(os.path.dirname(out), \"bundle.tar.gz\"), \"w:gz\") as t:\n    t.add(out, arcname=\"out\")\nprint(json.dumps(result, indent=2))\n"
+        },
+        {
+          "name": "Upload the evidence bundle",
+          "if": "always()",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "bundle-0b1a3a903b1e22b3f2be5d1dc0afce24b0ed3a187484f214c46f0da32c6b987b",
+            "path": "${{ runner.temp }}/abis/bundle.tar.gz",
+            "compression-level": 0,
+            "retention-days": 90,
+            "if-no-files-found": "error"
+          }
         }
       ]
     }
