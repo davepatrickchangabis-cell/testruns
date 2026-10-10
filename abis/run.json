@@ -1,0 +1,15 @@
+{
+  "run_id": "3e030376-566d-4d62-836d-9a2f0987e8d4",
+  "prepare_id": "86802177-20fc-456b-91f4-1613578b09e9",
+  "target": {
+    "owner": "numpy",
+    "repo": "numpy",
+    "sha": "70fa99843c75ae12434805bb4b1b07b94598c5c9"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:8418426c2a028ca641fb60729f7e2d2ddb259ce23ff8a1846044b5126e0c37b8"
+  },
+  "prepared_at": "2026-10-10T06:50:43.947Z",
+  "environments": []
+}
