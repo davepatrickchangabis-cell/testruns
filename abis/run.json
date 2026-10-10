@@ -1,0 +1,15 @@
+{
+  "run_id": "6b655615-4a07-4546-bd1d-333108e659fe",
+  "prepare_id": "f507c891-43d0-4d56-8f50-d066956f63dc",
+  "target": {
+    "owner": "torvalds",
+    "repo": "linux",
+    "sha": "9b87fdc9af2fbfcdb5c24a64139685ef80f6573f"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:3d63d4e18bff0eeeb81104a69e02172013b168d9d189ae22de32017cd28476ec"
+  },
+  "prepared_at": "2026-10-10T22:51:05.174Z",
+  "environments": []
+}
