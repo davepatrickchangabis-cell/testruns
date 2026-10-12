@@ -1,0 +1,14 @@
+{
+  "id": "flutter-declared",
+  "name": "flutter",
+  "repo": "flutter",
+  "source": "https://github.com/flutter/flutter",
+  "out": "out",
+  "sbom": {
+    "technology": "auto",
+    "cdxgen": "cdxgen",
+    "spec_version": "1.7",
+    "requirements": null,
+    "full": false
+  }
+}
