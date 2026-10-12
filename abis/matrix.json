@@ -1,0 +1,14 @@
+{
+  "include": [],
+  "declared": [
+    {
+      "content_key": "1c880529223b712269fea16205c43d6edd1d216f9e97ec8ba660763e9a249ecd",
+      "config_name": "scancode-toolkit-declared",
+      "runner": "ubuntu-latest",
+      "os": "linux",
+      "arch": "x86_64",
+      "libc": null,
+      "python": "3.12"
+    }
+  ]
+}

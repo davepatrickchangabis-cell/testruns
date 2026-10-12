@@ -1,0 +1,14 @@
+{
+  "id": "scancode-toolkit-declared",
+  "name": "scancode-toolkit",
+  "repo": "scancode-toolkit",
+  "source": "https://github.com/aboutcode-org/scancode-toolkit",
+  "out": "out",
+  "sbom": {
+    "technology": "auto",
+    "cdxgen": "cdxgen",
+    "spec_version": "1.7",
+    "requirements": null,
+    "full": false
+  }
+}

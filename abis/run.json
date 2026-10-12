@@ -1,0 +1,15 @@
+{
+  "run_id": "46540212-7b1e-46fa-842c-f2a2ed255229",
+  "prepare_id": "a4f697ae-4eb8-4d8e-a10a-fffb2e45d08d",
+  "target": {
+    "owner": "aboutcode-org",
+    "repo": "scancode-toolkit",
+    "sha": "5e8448ecf2397c6eb7e7eb50326c8c880d9b598b"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:3d63d4e18bff0eeeb81104a69e02172013b168d9d189ae22de32017cd28476ec"
+  },
+  "prepared_at": "2026-10-12T09:32:27.556Z",
+  "environments": []
+}
