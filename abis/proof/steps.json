@@ -1,0 +1,14 @@
+[
+  {
+    "name": "Install native dependency (libkrb5-dev)",
+    "run": "set -euo pipefail\nsudo apt-get update\nsudo apt-get install -y libkrb5-dev",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "Build mono+libs+host+packs (Debug, linux-arm64)",
+    "run": "set -euo pipefail\n./build.sh -s mono+libs+host+packs -os linux -arch arm64 -c Debug -rc Debug -lc Debug",
+    "shell": "bash",
+    "phase": "build"
+  }
+]
