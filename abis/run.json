@@ -1,0 +1,15 @@
+{
+  "run_id": "9871ea6f-a866-45da-9406-b33d7e5ef576",
+  "prepare_id": "7f3692ce-4541-4640-a603-ac90f58d7f2f",
+  "target": {
+    "owner": "grpc",
+    "repo": "grpc-dotnet",
+    "sha": "7db6c142a2dd5e0fefb0681e67766e339a15dc47"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:3d63d4e18bff0eeeb81104a69e02172013b168d9d189ae22de32017cd28476ec"
+  },
+  "prepared_at": "2026-10-19T16:09:46.668Z",
+  "environments": []
+}

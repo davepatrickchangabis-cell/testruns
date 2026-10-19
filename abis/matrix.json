@@ -1,0 +1,14 @@
+{
+  "include": [],
+  "declared": [
+    {
+      "content_key": "fa77501f54c76c07dccfbbcec983316769da5a1c92e99bbca13ae20acbcb469c",
+      "config_name": "grpc-dotnet-declared",
+      "runner": "ubuntu-latest",
+      "os": "linux",
+      "arch": "x86_64",
+      "libc": null,
+      "python": "3.12"
+    }
+  ]
+}
