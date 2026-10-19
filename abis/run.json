@@ -1,0 +1,15 @@
+{
+  "run_id": "dba62299-679c-4136-a88b-1659c297cb49",
+  "prepare_id": "51b0c00a-a713-45ef-bf8b-a2cd79512e04",
+  "target": {
+    "owner": "libusb",
+    "repo": "libusb",
+    "sha": "1d8469ec9d55aee43b45a10574f99b43303f70f3"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:3d63d4e18bff0eeeb81104a69e02172013b168d9d189ae22de32017cd28476ec"
+  },
+  "prepared_at": "2026-10-19T14:10:10.696Z",
+  "environments": []
+}

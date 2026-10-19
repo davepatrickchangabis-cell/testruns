@@ -1,0 +1,14 @@
+{
+  "id": "libusb-declared",
+  "name": "libusb",
+  "repo": "libusb",
+  "source": "https://github.com/libusb/libusb",
+  "out": "out",
+  "sbom": {
+    "technology": "auto",
+    "cdxgen": "cdxgen",
+    "spec_version": "1.7",
+    "requirements": null,
+    "full": false
+  }
+}

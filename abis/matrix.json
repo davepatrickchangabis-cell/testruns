@@ -1,0 +1,14 @@
+{
+  "include": [],
+  "declared": [
+    {
+      "content_key": "a4ac6dfacc66e8cc23e9ee23ea5f77dbb7c7c9f852143bdda485c3231f11fe45",
+      "config_name": "libusb-declared",
+      "runner": "ubuntu-latest",
+      "os": "linux",
+      "arch": "x86_64",
+      "libc": null,
+      "python": "3.12"
+    }
+  ]
+}
