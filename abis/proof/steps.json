@@ -1,0 +1,63 @@
+[
+  {
+    "name": "setup prerequisites",
+    "run": "sudo apt update\nsudo apt install -y autoconf automake libtool libudev-dev m4 pkg-config clang llvm doxygen",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "bootstrap",
+    "run": "./bootstrap.sh",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "netlink",
+    "run": ".private/ci-build.sh --werror --build-dir build-netlink --no-test -- --disable-udev",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "udev",
+    "run": ".private/ci-build.sh --werror --build-dir build-udev --build-docs -- --enable-udev",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "Release build",
+    "run": "mkdir build-release && cd build-release\n../configure --enable-udev --enable-man-pages\nmake -j$(nproc)\nmake install DESTDIR=\"$PWD/staging\"",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "debug-log",
+    "run": ".private/ci-build.sh --werror --build-dir build-debug -- --enable-debug-log",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "disable-log",
+    "run": ".private/ci-build.sh --werror --build-dir build-nolog -- --disable-log",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "npm install (webusb test shim)",
+    "run": "npm ci",
+    "shell": "bash",
+    "phase": "test",
+    "workdir": "tests/webusb-test-shim"
+  },
+  {
+    "name": "emscripten",
+    "run": "emconfigure .private/ci-build.sh --build-dir build-emscripten -- --host=wasm32-unknown-emscripten",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "umockdev test",
+    "run": ".private/ci-container-build.sh docker.io/amd64/ubuntu:rolling",
+    "shell": "bash",
+    "phase": "test"
+  }
+]
