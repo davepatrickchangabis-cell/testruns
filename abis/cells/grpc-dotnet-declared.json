@@ -1,0 +1,14 @@
+{
+  "id": "grpc-dotnet-declared",
+  "name": "grpc-dotnet",
+  "repo": "grpc-dotnet",
+  "source": "https://github.com/grpc/grpc-dotnet",
+  "out": "out",
+  "sbom": {
+    "technology": "auto",
+    "cdxgen": "cdxgen",
+    "spec_version": "1.7",
+    "requirements": null,
+    "full": false
+  }
+}
