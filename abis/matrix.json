@@ -1,0 +1,14 @@
+{
+  "include": [],
+  "declared": [
+    {
+      "content_key": "995abd826188c0e04ed15bab8f411fd3793472f759f82531ec7bef83cfe9e5a2",
+      "config_name": "protobuf-declared",
+      "runner": "ubuntu-latest",
+      "os": "linux",
+      "arch": "x86_64",
+      "libc": null,
+      "python": "3.12"
+    }
+  ]
+}

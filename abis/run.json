@@ -1,0 +1,15 @@
+{
+  "run_id": "d02a86b4-ef40-4322-97fd-6c59889bab60",
+  "prepare_id": "2f109869-b131-4236-93a0-39f07c37f5e3",
+  "target": {
+    "owner": "protocolbuffers",
+    "repo": "protobuf",
+    "sha": "1d8382d5bdbd06af4e60e4d4e4d53241bfa5dbe8"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:3d63d4e18bff0eeeb81104a69e02172013b168d9d189ae22de32017cd28476ec"
+  },
+  "prepared_at": "2026-10-19T14:49:54.765Z",
+  "environments": []
+}

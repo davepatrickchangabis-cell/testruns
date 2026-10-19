@@ -1,0 +1,14 @@
+{
+  "id": "protobuf-declared",
+  "name": "protobuf",
+  "repo": "protobuf",
+  "source": "https://github.com/protocolbuffers/protobuf",
+  "out": "out",
+  "sbom": {
+    "technology": "auto",
+    "cdxgen": "cdxgen",
+    "spec_version": "1.7",
+    "requirements": null,
+    "full": false
+  }
+}
