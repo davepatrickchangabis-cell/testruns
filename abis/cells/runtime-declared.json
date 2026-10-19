@@ -1,0 +1,14 @@
+{
+  "id": "runtime-declared",
+  "name": "runtime",
+  "repo": "runtime",
+  "source": "https://github.com/dotnet/runtime",
+  "out": "out",
+  "sbom": {
+    "technology": "auto",
+    "cdxgen": "cdxgen",
+    "spec_version": "1.7",
+    "requirements": null,
+    "full": false
+  }
+}

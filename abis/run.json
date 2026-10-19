@@ -1,0 +1,15 @@
+{
+  "run_id": "51b65bed-74da-48b2-a916-ea2a8ee95bae",
+  "prepare_id": "03f485b4-f635-4864-b2d7-f6fdc58911e0",
+  "target": {
+    "owner": "dotnet",
+    "repo": "runtime",
+    "sha": "699100ec729dddc77dcafa770b3b9e177357ec41"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:3d63d4e18bff0eeeb81104a69e02172013b168d9d189ae22de32017cd28476ec"
+  },
+  "prepared_at": "2026-10-19T15:25:07.821Z",
+  "environments": []
+}
