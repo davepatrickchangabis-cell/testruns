@@ -15,12 +15,77 @@
   "permissions": {
     "contents": "read"
   },
+  "concurrency": {
+    "group": "abis-${{ inputs.abis_run_id }}",
+    "cancel-in-progress": true
+  },
   "jobs": {
-    "registered": {
+    "cell": {
+      "name": "cell (14a524fd6b94c790e9ce5ad3ed79f6c7df56b30c3b9bfa15f92b27ae58e4f3a6, linux-linux_x86-14a524fd6b94c790e9ce5ad3ed79f6c7df56b30c3b9bfa15f92b27ae58e4f3a6)",
       "runs-on": "ubuntu-latest",
+      "timeout-minutes": 90,
       "steps": [
         {
-          "run": "echo 'Dispatched on an abis/run/<id> ref, the copy on that ref runs; this one only registers the name.'"
+          "name": "Keep line endings as committed",
+          "shell": "bash",
+          "run": "git config --global core.autocrlf false"
+        },
+        {
+          "name": "Check out the target at its pinned commit",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "repository": "torvalds/linux",
+            "ref": "21a7f44fd0765fcc5194130b28767786eba1d1e7",
+            "submodules": "recursive",
+            "persist-credentials": false
+          }
+        },
+        {
+          "id": "abis_gate",
+          "name": "Prove the checkout is the snapshot",
+          "shell": "bash",
+          "run": "tree=$(git rev-parse 'HEAD^{tree}')\necho \"checkout tree $tree\"\nif [ \"$tree\" != \"fd0caac36e8ce4eb477f0d3aa37655fe94ba09e4\" ]; then\n  echo \"::error::the checkout's tree $tree is not the snapshot's fd0caac36e8ce4eb477f0d3aa37655fe94ba09e4\"\n  exit 12\nfi"
+        },
+        {
+          "id": "s1",
+          "name": "[recipe] Install build dependencies",
+          "shell": "bash",
+          "run": "sudo apt-get update && sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev dwarves cpio rsync python3"
+        },
+        {
+          "id": "s2",
+          "name": "[recipe] Configure i386_defconfig",
+          "shell": "bash",
+          "run": "make ARCH=x86 i386_defconfig"
+        },
+        {
+          "id": "s3",
+          "name": "[recipe] Build kernel and modules",
+          "shell": "bash",
+          "run": "make -j\"$(nproc)\" ARCH=x86 bzImage modules"
+        },
+        {
+          "name": "Measure what the build produced",
+          "if": "always()",
+          "shell": "python",
+          "env": {
+            "ABIS_STEPS": "${{ toJSON(steps) }}",
+            "ABIS_OUT": "${{ runner.temp }}/abis/out",
+            "ABIS_SPEC": "{\"run_id\":\"fdf0fa46-b303-4534-87a0-3d81945d7daf\",\"content_key\":\"14a524fd6b94c790e9ce5ad3ed79f6c7df56b30c3b9bfa15f92b27ae58e4f3a6\",\"config_name\":\"linux-linux_x86-14a524fd6b94c790e9ce5ad3ed79f6c7df56b30c3b9bfa15f92b27ae58e4f3a6\",\"attempt\":2,\"step_ids\":[\"s1\",\"s2\",\"s3\"],\"artifacts\":[\"arch/x86/boot/bzImage\",\"vmlinux\",\"System.map\"],\"recipe\":{\"runs_on\":\"ubuntu-latest\",\"steps\":[{\"name\":\"Install build dependencies\",\"run\":\"sudo apt-get update && sudo apt-get install -y build-essential bc bison flex libssl-dev libelf-dev dwarves cpio rsync python3\",\"shell\":\"bash\"},{\"name\":\"Configure i386_defconfig\",\"run\":\"make ARCH=x86 i386_defconfig\",\"shell\":\"bash\"},{\"name\":\"Build kernel and modules\",\"run\":\"make -j\\\"$(nproc)\\\" ARCH=x86 bzImage modules\",\"shell\":\"bash\"}],\"artifacts\":[\"arch/x86/boot/bzImage\",\"vmlinux\",\"System.map\"],\"citations\":{\"steps\":\"arch/x86/configs/i386_defconfig\"},\"notes\":\"Builds a 32-bit x86 Linux kernel with the i386_defconfig on Ubuntu.\"}}"
+          },
+          "run": "import glob, hashlib, json, os, tarfile\nout = os.environ[\"ABIS_OUT\"]\nos.makedirs(out, exist_ok=True)\nspec = json.loads(os.environ[\"ABIS_SPEC\"])\ntry:\n    steps = json.loads(os.environ.get(\"ABIS_STEPS\") or \"{}\")\nexcept ValueError:\n    steps = {}\norder = [\"abis_gate\"] + spec[\"step_ids\"]\noutcomes = {i: (steps.get(i) or {}).get(\"outcome\") for i in order}\nfailed = next((i for i in order if outcomes[i] == \"failure\"), None)\nws = os.environ.get(\"GITHUB_WORKSPACE\", \".\")\nartifacts, missing = [], []\nfor pattern in spec[\"artifacts\"]:\n    hits = sorted(p for p in glob.glob(os.path.join(ws, pattern), recursive=True) if os.path.isfile(p))\n    if not hits:\n        missing.append(pattern)\n    for p in hits[:200]:\n        h = hashlib.sha256()\n        with open(p, \"rb\") as f:\n            for chunk in iter(lambda: f.read(1 << 20), b\"\"):\n                h.update(chunk)\n        artifacts.append({\"pattern\": pattern, \"path\": os.path.relpath(p, ws).replace(os.sep, \"/\"),\n                          \"sha256\": h.hexdigest(), \"bytes\": os.path.getsize(p)})\nran = all(outcomes[i] == \"success\" for i in order)\nresult = {\"schema\": \"abis-buildcell-result/1\", \"run_id\": spec[\"run_id\"], \"content_key\": spec[\"content_key\"],\n          \"config_name\": spec[\"config_name\"], \"attempt\": spec[\"attempt\"], \"steps\": outcomes,\n          \"failed_step\": failed, \"artifacts\": artifacts, \"missing\": missing,\n          \"built\": ran and bool(artifacts) and not missing}\nwith open(os.path.join(out, \"result.json\"), \"w\") as f:\n    json.dump(result, f, indent=2)\nwith open(os.path.join(out, \"recipe.json\"), \"w\") as f:\n    json.dump(spec[\"recipe\"], f, indent=2)\nwith tarfile.open(os.path.join(os.path.dirname(out), \"bundle.tar.gz\"), \"w:gz\") as t:\n    t.add(out, arcname=\"out\")\nprint(json.dumps(result, indent=2))\n"
+        },
+        {
+          "name": "Upload the evidence bundle",
+          "if": "always()",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "bundle-14a524fd6b94c790e9ce5ad3ed79f6c7df56b30c3b9bfa15f92b27ae58e4f3a6",
+            "path": "${{ runner.temp }}/abis/bundle.tar.gz",
+            "compression-level": 0,
+            "retention-days": 90,
+            "if-no-files-found": "error"
+          }
         }
       ]
     }
