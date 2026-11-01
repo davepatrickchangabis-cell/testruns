@@ -1,0 +1,20 @@
+[
+  {
+    "name": "Install build dependencies",
+    "run": "sudo apt-get update && sudo apt-get install -y build-essential bc flex bison libssl-dev libelf-dev dwarves device-tree-compiler",
+    "shell": "bash",
+    "phase": "prepare"
+  },
+  {
+    "name": "Configure kernel (defconfig)",
+    "run": "make ARCH=arm64 defconfig",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "Build kernel Image, modules, and DTBs",
+    "run": "make -j\"$(nproc)\" ARCH=arm64 Image modules dtbs",
+    "shell": "bash",
+    "phase": "build"
+  }
+]
