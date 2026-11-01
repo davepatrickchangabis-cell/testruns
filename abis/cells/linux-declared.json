@@ -1,0 +1,14 @@
+{
+  "id": "linux-declared",
+  "name": "linux",
+  "repo": "linux",
+  "source": "https://github.com/torvalds/linux",
+  "out": "out",
+  "sbom": {
+    "technology": "auto",
+    "cdxgen": "cdxgen",
+    "spec_version": "1.7",
+    "requirements": null,
+    "full": false
+  }
+}

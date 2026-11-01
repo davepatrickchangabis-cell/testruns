@@ -1,0 +1,14 @@
+{
+  "include": [],
+  "declared": [
+    {
+      "content_key": "9a1f551ec0195f1902adb3246ccd46d5f08b63e2e54a9635983b2029ac5e8df6",
+      "config_name": "linux-declared",
+      "runner": "ubuntu-latest",
+      "os": "linux",
+      "arch": "x86_64",
+      "libc": null,
+      "python": "3.12"
+    }
+  ]
+}
