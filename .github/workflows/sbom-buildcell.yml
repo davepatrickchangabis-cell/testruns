@@ -15,12 +15,93 @@
   "permissions": {
     "contents": "read"
   },
+  "concurrency": {
+    "group": "abis-${{ inputs.abis_run_id }}",
+    "cancel-in-progress": true
+  },
   "jobs": {
-    "registered": {
+    "cell": {
+      "name": "cell (eff7e26457026625d8afd5781e0795b2c59e25f616c0cf07d47c4636ecbd9a74, linux-linux_riscv-eff7e26457026625d8afd5781e0795b2c59e25f616c0cf07d47c4636ecbd9a74)",
       "runs-on": "ubuntu-latest",
+      "timeout-minutes": 90,
       "steps": [
         {
-          "run": "echo 'Dispatched on an abis/run/<id> ref, the copy on that ref runs; this one only registers the name.'"
+          "name": "Keep line endings as committed",
+          "shell": "bash",
+          "run": "git config --global core.autocrlf false"
+        },
+        {
+          "name": "Check out the target at its pinned commit",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "repository": "torvalds/linux",
+            "ref": "cbbddb6b08cc9900a87cccaa9b22bbe06aa4f50a",
+            "submodules": "recursive",
+            "persist-credentials": false
+          }
+        },
+        {
+          "id": "abis_gate",
+          "name": "Prove the checkout is the snapshot",
+          "shell": "bash",
+          "run": "tree=$(git rev-parse 'HEAD^{tree}')\necho \"checkout tree $tree\"\nif [ \"$tree\" != \"64187d199649cb3a6f8daf9c6f8304d4f71fc7f0\" ]; then\n  echo \"::error::the checkout's tree $tree is not the snapshot's 64187d199649cb3a6f8daf9c6f8304d4f71fc7f0\"\n  exit 12\nfi"
+        },
+        {
+          "id": "s1",
+          "name": "[recipe] Install the kernel's build dependencies",
+          "shell": "bash",
+          "run": "sudo apt-get update -q\nsudo apt-get install -y -q --no-install-recommends bc bison flex libelf-dev libssl-dev"
+        },
+        {
+          "id": "s2",
+          "name": "[recipe] Install kernel.org GCC 15.2.0 for riscv64-linux",
+          "shell": "bash",
+          "run": "set -euo pipefail\ncurl -fsSL --retry 3 -o \"$RUNNER_TEMP/x86_64-gcc-15.2.0-nolibc-riscv64-linux.tar.xz\" https://mirrors.edge.kernel.org/pub/tools/crosstool/files/bin/x86_64/15.2.0/x86_64-gcc-15.2.0-nolibc-riscv64-linux.tar.xz\necho \"b54e712dc3760d794203c2de9f0d4e31da601b1a40eee9fb943643006e0977f4  $RUNNER_TEMP/x86_64-gcc-15.2.0-nolibc-riscv64-linux.tar.xz\" | sha256sum -c -\nmkdir -p \"$HOME/cross\"\ntar -xJf \"$RUNNER_TEMP/x86_64-gcc-15.2.0-nolibc-riscv64-linux.tar.xz\" -C \"$HOME/cross\"\n\"$HOME/cross/gcc-15.2.0-nolibc/riscv64-linux/bin/riscv64-linux-\"gcc --version"
+        },
+        {
+          "id": "s3",
+          "name": "[recipe] Configure rv32_nommu_virt_defconfig",
+          "shell": "bash",
+          "run": "make ARCH=riscv CROSS_COMPILE=\"$HOME/cross/gcc-15.2.0-nolibc/riscv64-linux/bin/riscv64-linux-\" rv32_nommu_virt_defconfig",
+          "env": {
+            "KBUILD_BUILD_TIMESTAMP": "1970-01-01 00:00:00 UTC",
+            "KBUILD_BUILD_USER": "abis",
+            "KBUILD_BUILD_HOST": "abis"
+          }
+        },
+        {
+          "id": "s4",
+          "name": "[recipe] Build vmlinux",
+          "shell": "bash",
+          "run": "make ARCH=riscv CROSS_COMPILE=\"$HOME/cross/gcc-15.2.0-nolibc/riscv64-linux/bin/riscv64-linux-\" -j\"$(nproc)\" vmlinux",
+          "env": {
+            "KBUILD_BUILD_TIMESTAMP": "1970-01-01 00:00:00 UTC",
+            "KBUILD_BUILD_USER": "abis",
+            "KBUILD_BUILD_HOST": "abis"
+          }
+        },
+        {
+          "name": "Measure what the build produced",
+          "if": "always()",
+          "shell": "python",
+          "env": {
+            "ABIS_STEPS": "${{ toJSON(steps) }}",
+            "ABIS_OUT": "${{ runner.temp }}/abis/out",
+            "ABIS_SPEC": "{\"run_id\":\"7e09cfe3-94e7-4d99-94ec-98e808a37d4f\",\"content_key\":\"eff7e26457026625d8afd5781e0795b2c59e25f616c0cf07d47c4636ecbd9a74\",\"config_name\":\"linux-linux_riscv-eff7e26457026625d8afd5781e0795b2c59e25f616c0cf07d47c4636ecbd9a74\",\"attempt\":1,\"step_ids\":[\"s1\",\"s2\",\"s3\",\"s4\"],\"artifacts\":[\"vmlinux\"],\"recipe\":{\"runs_on\":\"ubuntu-latest\",\"steps\":[{\"name\":\"Install the kernel's build dependencies\",\"run\":\"sudo apt-get update -q\\nsudo apt-get install -y -q --no-install-recommends bc bison flex libelf-dev libssl-dev\",\"shell\":\"bash\"},{\"name\":\"Install kernel.org GCC 15.2.0 for riscv64-linux\",\"run\":\"set -euo pipefail\\ncurl -fsSL --retry 3 -o \\\"$RUNNER_TEMP/x86_64-gcc-15.2.0-nolibc-riscv64-linux.tar.xz\\\" https://mirrors.edge.kernel.org/pub/tools/crosstool/files/bin/x86_64/15.2.0/x86_64-gcc-15.2.0-nolibc-riscv64-linux.tar.xz\\necho \\\"b54e712dc3760d794203c2de9f0d4e31da601b1a40eee9fb943643006e0977f4  $RUNNER_TEMP/x86_64-gcc-15.2.0-nolibc-riscv64-linux.tar.xz\\\" | sha256sum -c -\\nmkdir -p \\\"$HOME/cross\\\"\\ntar -xJf \\\"$RUNNER_TEMP/x86_64-gcc-15.2.0-nolibc-riscv64-linux.tar.xz\\\" -C \\\"$HOME/cross\\\"\\n\\\"$HOME/cross/gcc-15.2.0-nolibc/riscv64-linux/bin/riscv64-linux-\\\"gcc --version\",\"shell\":\"bash\"},{\"name\":\"Configure rv32_nommu_virt_defconfig\",\"run\":\"make ARCH=riscv CROSS_COMPILE=\\\"$HOME/cross/gcc-15.2.0-nolibc/riscv64-linux/bin/riscv64-linux-\\\" rv32_nommu_virt_defconfig\",\"shell\":\"bash\",\"env\":{\"KBUILD_BUILD_TIMESTAMP\":\"1970-01-01 00:00:00 UTC\",\"KBUILD_BUILD_USER\":\"abis\",\"KBUILD_BUILD_HOST\":\"abis\"}},{\"name\":\"Build vmlinux\",\"run\":\"make ARCH=riscv CROSS_COMPILE=\\\"$HOME/cross/gcc-15.2.0-nolibc/riscv64-linux/bin/riscv64-linux-\\\" -j\\\"$(nproc)\\\" vmlinux\",\"shell\":\"bash\",\"env\":{\"KBUILD_BUILD_TIMESTAMP\":\"1970-01-01 00:00:00 UTC\",\"KBUILD_BUILD_USER\":\"abis\",\"KBUILD_BUILD_HOST\":\"abis\"}}],\"artifacts\":[\"vmlinux\"],\"citations\":{\"steps\":\"arch/riscv/Makefile\"},\"notes\":\"Kernel recipe written by the server: kernel.org GCC 15.2.0 for riscv64-linux, cross-compiled.\"}}"
+          },
+          "run": "import glob, hashlib, json, os, tarfile\nout = os.environ[\"ABIS_OUT\"]\nos.makedirs(out, exist_ok=True)\nspec = json.loads(os.environ[\"ABIS_SPEC\"])\ntry:\n    steps = json.loads(os.environ.get(\"ABIS_STEPS\") or \"{}\")\nexcept ValueError:\n    steps = {}\norder = [\"abis_gate\"] + spec[\"step_ids\"]\noutcomes = {i: (steps.get(i) or {}).get(\"outcome\") for i in order}\nfailed = next((i for i in order if outcomes[i] == \"failure\"), None)\nws = os.environ.get(\"GITHUB_WORKSPACE\", \".\")\nartifacts, missing = [], []\nfor pattern in spec[\"artifacts\"]:\n    hits = sorted(p for p in glob.glob(os.path.join(ws, pattern), recursive=True) if os.path.isfile(p))\n    if not hits:\n        missing.append(pattern)\n    for p in hits[:200]:\n        h = hashlib.sha256()\n        with open(p, \"rb\") as f:\n            for chunk in iter(lambda: f.read(1 << 20), b\"\"):\n                h.update(chunk)\n        artifacts.append({\"pattern\": pattern, \"path\": os.path.relpath(p, ws).replace(os.sep, \"/\"),\n                          \"sha256\": h.hexdigest(), \"bytes\": os.path.getsize(p)})\nran = all(outcomes[i] == \"success\" for i in order)\nresult = {\"schema\": \"abis-buildcell-result/1\", \"run_id\": spec[\"run_id\"], \"content_key\": spec[\"content_key\"],\n          \"config_name\": spec[\"config_name\"], \"attempt\": spec[\"attempt\"], \"steps\": outcomes,\n          \"failed_step\": failed, \"artifacts\": artifacts, \"missing\": missing,\n          \"built\": ran and bool(artifacts) and not missing}\nwith open(os.path.join(out, \"result.json\"), \"w\") as f:\n    json.dump(result, f, indent=2)\nwith open(os.path.join(out, \"recipe.json\"), \"w\") as f:\n    json.dump(spec[\"recipe\"], f, indent=2)\nwith tarfile.open(os.path.join(os.path.dirname(out), \"bundle.tar.gz\"), \"w:gz\") as t:\n    t.add(out, arcname=\"out\")\nprint(json.dumps(result, indent=2))\n"
+        },
+        {
+          "name": "Upload the evidence bundle",
+          "if": "always()",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "bundle-eff7e26457026625d8afd5781e0795b2c59e25f616c0cf07d47c4636ecbd9a74",
+            "path": "${{ runner.temp }}/abis/bundle.tar.gz",
+            "compression-level": 0,
+            "retention-days": 90,
+            "if-no-files-found": "error"
+          }
         }
       ]
     }
