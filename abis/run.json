@@ -1,0 +1,16 @@
+{
+  "run_id": "4fa9b3e8-cde2-4cc1-9b1a-1404c1bd5d7c",
+  "prepare_id": "10178a59-981b-4ec0-be62-349bafdde3cc",
+  "target": {
+    "host": "github.com",
+    "owner": "torvalds",
+    "repo": "linux",
+    "sha": "cbbddb6b08cc9900a87cccaa9b22bbe06aa4f50a"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:3d63d4e18bff0eeeb81104a69e02172013b168d9d189ae22de32017cd28476ec"
+  },
+  "prepared_at": "2026-11-01T10:51:02.021Z",
+  "environments": []
+}
