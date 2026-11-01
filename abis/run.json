@@ -1,0 +1,16 @@
+{
+  "run_id": "35e94ead-07e2-45f2-b6e0-c228f93ce0dc",
+  "prepare_id": "3d1252b4-2510-4ca9-93e8-0f29406a32f3",
+  "target": {
+    "host": "github.com",
+    "owner": "flutter",
+    "repo": "flutter",
+    "sha": "a3ee5e3e8b30c6049360ed7c3ab13bd309a626d4"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:2d663c8abd5ee9873e4941008b1736004d97d54f2e7d44b5c9b88c4f0bdf2125"
+  },
+  "prepared_at": "2026-11-01T16:25:08.710Z",
+  "environments": []
+}

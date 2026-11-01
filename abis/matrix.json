@@ -1,0 +1,14 @@
+{
+  "include": [],
+  "declared": [
+    {
+      "content_key": "51d2ddf1dbf7cd702fb4e52cb8fe19768ca811b232e333a6de5e7d1bcf7d2d22",
+      "config_name": "flutter-declared",
+      "runner": "ubuntu-latest",
+      "os": "linux",
+      "arch": "x86_64",
+      "libc": null,
+      "python": "3.12"
+    }
+  ]
+}
