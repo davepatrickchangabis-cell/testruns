@@ -1,0 +1,36 @@
+[
+  {
+    "name": "Install the kernel's build dependencies",
+    "run": "sudo apt-get update -q\nsudo apt-get install -y -q --no-install-recommends bc bison flex libelf-dev libssl-dev",
+    "shell": "bash",
+    "phase": "prepare"
+  },
+  {
+    "name": "Install kernel.org GCC 15.2.0 for csky-linux",
+    "run": "set -euo pipefail\ncurl -fsSL --retry 3 -o \"$RUNNER_TEMP/x86_64-gcc-15.2.0-nolibc-csky-linux.tar.xz\" https://mirrors.edge.kernel.org/pub/tools/crosstool/files/bin/x86_64/15.2.0/x86_64-gcc-15.2.0-nolibc-csky-linux.tar.xz\necho \"ecad9f69dbfedf9d783de9a765b1347aeabf89c6526d223c4c50055798317f0e  $RUNNER_TEMP/x86_64-gcc-15.2.0-nolibc-csky-linux.tar.xz\" | sha256sum -c -\nmkdir -p \"$HOME/cross\"\ntar -xJf \"$RUNNER_TEMP/x86_64-gcc-15.2.0-nolibc-csky-linux.tar.xz\" -C \"$HOME/cross\"\n\"$HOME/cross/gcc-15.2.0-nolibc/csky-linux/bin/csky-linux-\"gcc --version",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "Configure defconfig",
+    "run": "make ARCH=csky CROSS_COMPILE=\"$HOME/cross/gcc-15.2.0-nolibc/csky-linux/bin/csky-linux-\" defconfig",
+    "shell": "bash",
+    "phase": "build",
+    "env": {
+      "KBUILD_BUILD_HOST": "abis",
+      "KBUILD_BUILD_USER": "abis",
+      "KBUILD_BUILD_TIMESTAMP": "1970-01-01 00:00:00 UTC"
+    }
+  },
+  {
+    "name": "Build vmlinux",
+    "run": "make ARCH=csky CROSS_COMPILE=\"$HOME/cross/gcc-15.2.0-nolibc/csky-linux/bin/csky-linux-\" -j\"$(nproc)\" vmlinux",
+    "shell": "bash",
+    "phase": "build",
+    "env": {
+      "KBUILD_BUILD_HOST": "abis",
+      "KBUILD_BUILD_USER": "abis",
+      "KBUILD_BUILD_TIMESTAMP": "1970-01-01 00:00:00 UTC"
+    }
+  }
+]
