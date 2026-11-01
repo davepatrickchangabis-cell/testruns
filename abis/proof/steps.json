@@ -1,0 +1,36 @@
+[
+  {
+    "name": "Install the kernel's build dependencies",
+    "run": "sudo apt-get update -q\nsudo apt-get install -y -q --no-install-recommends bc bison flex libelf-dev libssl-dev",
+    "shell": "bash",
+    "phase": "prepare"
+  },
+  {
+    "name": "Install kernel.org GCC 15.2.0 for arm-linux-gnueabi",
+    "run": "set -euo pipefail\ncurl -fsSL --retry 3 -o \"$RUNNER_TEMP/x86_64-gcc-15.2.0-nolibc-arm-linux-gnueabi.tar.xz\" https://mirrors.edge.kernel.org/pub/tools/crosstool/files/bin/x86_64/15.2.0/x86_64-gcc-15.2.0-nolibc-arm-linux-gnueabi.tar.xz\necho \"1d76128ba6a2e759a2fa1851c72e95ed6a6e86b97ab0adce5660e62fad23b82a  $RUNNER_TEMP/x86_64-gcc-15.2.0-nolibc-arm-linux-gnueabi.tar.xz\" | sha256sum -c -\nmkdir -p \"$HOME/cross\"\ntar -xJf \"$RUNNER_TEMP/x86_64-gcc-15.2.0-nolibc-arm-linux-gnueabi.tar.xz\" -C \"$HOME/cross\"\n\"$HOME/cross/gcc-15.2.0-nolibc/arm-linux-gnueabi/bin/arm-linux-gnueabi-\"gcc --version",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "Configure am200epdkit_defconfig",
+    "run": "make ARCH=arm CROSS_COMPILE=\"$HOME/cross/gcc-15.2.0-nolibc/arm-linux-gnueabi/bin/arm-linux-gnueabi-\" am200epdkit_defconfig",
+    "shell": "bash",
+    "phase": "build",
+    "env": {
+      "KBUILD_BUILD_HOST": "abis",
+      "KBUILD_BUILD_USER": "abis",
+      "KBUILD_BUILD_TIMESTAMP": "1970-01-01 00:00:00 UTC"
+    }
+  },
+  {
+    "name": "Build vmlinux",
+    "run": "make ARCH=arm CROSS_COMPILE=\"$HOME/cross/gcc-15.2.0-nolibc/arm-linux-gnueabi/bin/arm-linux-gnueabi-\" -j\"$(nproc)\" vmlinux",
+    "shell": "bash",
+    "phase": "build",
+    "env": {
+      "KBUILD_BUILD_HOST": "abis",
+      "KBUILD_BUILD_USER": "abis",
+      "KBUILD_BUILD_TIMESTAMP": "1970-01-01 00:00:00 UTC"
+    }
+  }
+]
