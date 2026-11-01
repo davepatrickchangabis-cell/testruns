@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Install .NET SDKs (8.0, 9.0, 10.0)",
+    "run": "set -e\ncurl -L https://dot.net/v1/dotnet-install.sh -o dotnet-install.sh\nchmod +x dotnet-install.sh\n./dotnet-install.sh -c 8.0\n./dotnet-install.sh -c 9.0\n./dotnet-install.sh -c 10.0",
+    "shell": "bash",
+    "phase": "prepare"
+  },
+  {
+    "name": "Restore",
+    "run": "$HOME/.dotnet/dotnet restore src/Grpc.AspNetCore.Server.Reflection/Grpc.AspNetCore.Server.Reflection.csproj",
+    "shell": "bash",
+    "phase": "prepare"
+  },
+  {
+    "name": "Build (Release)",
+    "run": "$HOME/.dotnet/dotnet build -c Release --no-restore src/Grpc.AspNetCore.Server.Reflection/Grpc.AspNetCore.Server.Reflection.csproj",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "Pack (Release)",
+    "run": "$HOME/.dotnet/dotnet pack -c Release --no-restore src/Grpc.AspNetCore.Server.Reflection/Grpc.AspNetCore.Server.Reflection.csproj",
+    "shell": "bash",
+    "phase": "build"
+  }
+]

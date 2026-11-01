@@ -1,0 +1,20 @@
+{
+  "*Makefile": "cc default: a build description no tracer sees being read",
+  "*makefile": "cc default: a build description no tracer sees being read",
+  "*GNUmakefile": "cc default: a build description no tracer sees being read",
+  "*.mk": "cc default: a build description no tracer sees being read",
+  "*CMakeLists.txt": "cc default: a build description no tracer sees being read",
+  "*.cmake": "cc default: a build description no tracer sees being read",
+  "*.in": "cc default: a build description no tracer sees being read",
+  "*.am": "cc default: a build description no tracer sees being read",
+  "*.ac": "cc default: a build description no tracer sees being read",
+  "*configure": "cc default: a build description no tracer sees being read",
+  "*meson.build": "cc default: a build description no tracer sees being read",
+  "*meson_options.txt": "cc default: a build description no tracer sees being read",
+  "*meson.options": "cc default: a build description no tracer sees being read",
+  "*Kbuild": "cc default: a build description no tracer sees being read",
+  "*Kbuild.*": "cc default: a build description no tracer sees being read",
+  "*Kconfig": "cc default: a build description no tracer sees being read",
+  "*Kconfig.*": "cc default: a build description no tracer sees being read",
+  "src/Grpc.AspNetCore.Server.Reflection/Grpc.AspNetCore.Server.Reflection.csproj": "named by recipe step \"Restore\""
+}

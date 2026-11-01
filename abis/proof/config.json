@@ -1,0 +1,30 @@
+{
+  "adapter": "cc",
+  "build_cmd": "\"$ABIS_PYTHON\" \"$ABIS_RECIPE\" build",
+  "test_cmd": "",
+  "clean_cmd": "",
+  "artifacts": [
+    "src/Grpc.AspNetCore.Server.Reflection/bin/Release/Grpc.AspNetCore.Server.Reflection.2.84.0-dev.nupkg"
+  ],
+  "test_artifacts": [],
+  "keep": [
+    "*Makefile",
+    "*makefile",
+    "*GNUmakefile",
+    "*.mk",
+    "*CMakeLists.txt",
+    "*.cmake",
+    "*.in",
+    "*.am",
+    "*.ac",
+    "*configure",
+    "*meson.build",
+    "*meson_options.txt",
+    "*meson.options",
+    "*Kbuild",
+    "*Kbuild.*",
+    "*Kconfig",
+    "*Kconfig.*",
+    "src/Grpc.AspNetCore.Server.Reflection/Grpc.AspNetCore.Server.Reflection.csproj"
+  ]
+}
