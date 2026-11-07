@@ -1,0 +1,16 @@
+{
+  "run_id": "1aaac2dc-bea5-4ae4-ab46-e5ea59a79d3d",
+  "prepare_id": "45609b21-bc6f-4633-8c9d-009fb9587de2",
+  "target": {
+    "host": "github.com",
+    "owner": "Kareadita",
+    "repo": "Kavita",
+    "sha": "c78f8a8ba5d5870333b1b708e8f23f66ca03041f"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:2d663c8abd5ee9873e4941008b1736004d97d54f2e7d44b5c9b88c4f0bdf2125"
+  },
+  "prepared_at": "2026-11-07T07:41:40.041Z",
+  "environments": []
+}

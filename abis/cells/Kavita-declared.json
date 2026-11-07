@@ -1,0 +1,14 @@
+{
+  "id": "Kavita-declared",
+  "name": "Kavita",
+  "repo": "Kavita",
+  "source": "https://github.com/Kareadita/Kavita",
+  "out": "out",
+  "sbom": {
+    "technology": "auto",
+    "cdxgen": "cdxgen",
+    "spec_version": "1.7",
+    "requirements": null,
+    "full": false
+  }
+}
