@@ -1,0 +1,8 @@
+[
+  {
+    "name": "Show Buildx version",
+    "run": "docker buildx version",
+    "shell": "bash",
+    "phase": "build"
+  }
+]
