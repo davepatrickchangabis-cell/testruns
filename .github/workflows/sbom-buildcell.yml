@@ -15,12 +15,65 @@
   "permissions": {
     "contents": "read"
   },
+  "concurrency": {
+    "group": "abis-${{ inputs.abis_run_id }}",
+    "cancel-in-progress": true
+  },
   "jobs": {
-    "registered": {
+    "cell": {
+      "name": "cell (1345ea8e181d94999c4b79676fa9d054e38b1ef22b5f14b7429ac70ee4b71ec1, Kavita-linux_x86_64_musl-1345ea8e181d94999c4b79676fa9d054e38b1ef22b5f14b7429ac70ee4b71ec1)",
       "runs-on": "ubuntu-latest",
+      "timeout-minutes": 90,
       "steps": [
         {
-          "run": "echo 'Dispatched on an abis/run/<id> ref, the copy on that ref runs; this one only registers the name.'"
+          "name": "Keep line endings as committed",
+          "shell": "bash",
+          "run": "git config --global core.autocrlf false"
+        },
+        {
+          "name": "Check out the target at its pinned commit",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "repository": "Kareadita/Kavita",
+            "ref": "c78f8a8ba5d5870333b1b708e8f23f66ca03041f",
+            "submodules": "recursive",
+            "persist-credentials": false
+          }
+        },
+        {
+          "id": "abis_gate",
+          "name": "Prove the checkout is the snapshot",
+          "shell": "bash",
+          "run": "tree=$(git rev-parse 'HEAD^{tree}')\necho \"checkout tree $tree\"\nif [ \"$tree\" != \"f00a1a0226591510c85d2d62ec019e6c21bfc35f\" ]; then\n  echo \"::error::the checkout's tree $tree is not the snapshot's f00a1a0226591510c85d2d62ec019e6c21bfc35f\"\n  exit 12\nfi"
+        },
+        {
+          "id": "s1",
+          "name": "[recipe] Build fsprobe for linux-musl-x64 and package",
+          "shell": "bash",
+          "run": "set -euo pipefail\n# Prepare output root under repo so artifact path matches expectations\nrm -rf fsprobe/dist || true\nmkdir -p fsprobe/dist\n\nrid=\"linux-musl-x64\"\nname=\"fsprobe\"\nout=\"fsprobe/dist/${name}-${rid}\"\n\n# Locate the fsprobe project (.csproj), case-insensitive\nproj_csproj=$(find . -type f -iname '*fsprobe*.csproj' -print -quit)\nif [ -z \"${proj_csproj}\" ]; then\n  echo \"::error::Could not find fsprobe .csproj in repository\" >&2\n  exit 1\nfi\nproj_dir=$(dirname \"${proj_csproj}\")\n\n# Build\n-dotnet --info >/dev/null 2>&1 || true\n dotnet publish -c Release -r \"${rid}\" -o \"${out}\" -v q \"${proj_csproj}\"\n\n# Package (include README if present in project folder)\nif [ -f \"${proj_dir}/README.md\" ]; then\n  cp \"${proj_dir}/README.md\" \"${out}/\"\nfi\n\ntar -czf \"fsprobe/dist/${name}-${rid}.tar.gz\" -C fsprobe/dist --mode='u+rwx,go+rx' \"${name}-${rid}\"\nls -l fsprobe/dist/*.tar.gz"
+        },
+        {
+          "name": "Measure what the build produced",
+          "if": "always()",
+          "shell": "python",
+          "env": {
+            "ABIS_STEPS": "${{ toJSON(steps) }}",
+            "ABIS_OUT": "${{ runner.temp }}/abis/out",
+            "ABIS_SPEC": "{\"run_id\":\"a8a5bf0d-c2bf-4b8d-bf26-449ac75b4898\",\"content_key\":\"1345ea8e181d94999c4b79676fa9d054e38b1ef22b5f14b7429ac70ee4b71ec1\",\"config_name\":\"Kavita-linux_x86_64_musl-1345ea8e181d94999c4b79676fa9d054e38b1ef22b5f14b7429ac70ee4b71ec1\",\"attempt\":2,\"step_ids\":[\"s1\"],\"artifacts\":[\"fsprobe/dist/fsprobe-linux-musl-x64.tar.gz\"],\"recipe\":{\"runs_on\":\"ubuntu-latest\",\"steps\":[{\"name\":\"Build fsprobe for linux-musl-x64 and package\",\"run\":\"set -euo pipefail\\n# Prepare output root under repo so artifact path matches expectations\\nrm -rf fsprobe/dist || true\\nmkdir -p fsprobe/dist\\n\\nrid=\\\"linux-musl-x64\\\"\\nname=\\\"fsprobe\\\"\\nout=\\\"fsprobe/dist/${name}-${rid}\\\"\\n\\n# Locate the fsprobe project (.csproj), case-insensitive\\nproj_csproj=$(find . -type f -iname '*fsprobe*.csproj' -print -quit)\\nif [ -z \\\"${proj_csproj}\\\" ]; then\\n  echo \\\"::error::Could not find fsprobe .csproj in repository\\\" >&2\\n  exit 1\\nfi\\nproj_dir=$(dirname \\\"${proj_csproj}\\\")\\n\\n# Build\\n-dotnet --info >/dev/null 2>&1 || true\\n dotnet publish -c Release -r \\\"${rid}\\\" -o \\\"${out}\\\" -v q \\\"${proj_csproj}\\\"\\n\\n# Package (include README if present in project folder)\\nif [ -f \\\"${proj_dir}/README.md\\\" ]; then\\n  cp \\\"${proj_dir}/README.md\\\" \\\"${out}/\\\"\\nfi\\n\\ntar -czf \\\"fsprobe/dist/${name}-${rid}.tar.gz\\\" -C fsprobe/dist --mode='u+rwx,go+rx' \\\"${name}-${rid}\\\"\\nls -l fsprobe/dist/*.tar.gz\",\"shell\":\"bash\"}],\"artifacts\":[\"fsprobe/dist/fsprobe-linux-musl-x64.tar.gz\"],\"citations\":{\"steps\":\"scripts/ProbeCommon/publish.sh\"},\"notes\":\"Builds and packages fsprobe for linux-musl-x64 exactly as the publish.sh script does for that RID.\"}}"
+          },
+          "run": "import glob, hashlib, json, os, tarfile\nout = os.environ[\"ABIS_OUT\"]\nos.makedirs(out, exist_ok=True)\nspec = json.loads(os.environ[\"ABIS_SPEC\"])\ntry:\n    steps = json.loads(os.environ.get(\"ABIS_STEPS\") or \"{}\")\nexcept ValueError:\n    steps = {}\norder = [\"abis_gate\"] + spec[\"step_ids\"]\noutcomes = {i: (steps.get(i) or {}).get(\"outcome\") for i in order}\nfailed = next((i for i in order if outcomes[i] == \"failure\"), None)\nws = os.environ.get(\"GITHUB_WORKSPACE\", \".\")\nartifacts, missing = [], []\nfor pattern in spec[\"artifacts\"]:\n    hits = sorted(p for p in glob.glob(os.path.join(ws, pattern), recursive=True) if os.path.isfile(p))\n    if not hits:\n        missing.append(pattern)\n    for p in hits[:200]:\n        h = hashlib.sha256()\n        with open(p, \"rb\") as f:\n            for chunk in iter(lambda: f.read(1 << 20), b\"\"):\n                h.update(chunk)\n        artifacts.append({\"pattern\": pattern, \"path\": os.path.relpath(p, ws).replace(os.sep, \"/\"),\n                          \"sha256\": h.hexdigest(), \"bytes\": os.path.getsize(p)})\nran = all(outcomes[i] == \"success\" for i in order)\nresult = {\"schema\": \"abis-buildcell-result/1\", \"run_id\": spec[\"run_id\"], \"content_key\": spec[\"content_key\"],\n          \"config_name\": spec[\"config_name\"], \"attempt\": spec[\"attempt\"], \"steps\": outcomes,\n          \"failed_step\": failed, \"artifacts\": artifacts, \"missing\": missing,\n          \"built\": ran and bool(artifacts) and not missing}\nwith open(os.path.join(out, \"result.json\"), \"w\") as f:\n    json.dump(result, f, indent=2)\nwith open(os.path.join(out, \"recipe.json\"), \"w\") as f:\n    json.dump(spec[\"recipe\"], f, indent=2)\nwith tarfile.open(os.path.join(os.path.dirname(out), \"bundle.tar.gz\"), \"w:gz\") as t:\n    t.add(out, arcname=\"out\")\nprint(json.dumps(result, indent=2))\n"
+        },
+        {
+          "name": "Upload the evidence bundle",
+          "if": "always()",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "bundle-1345ea8e181d94999c4b79676fa9d054e38b1ef22b5f14b7429ac70ee4b71ec1",
+            "path": "${{ runner.temp }}/abis/bundle.tar.gz",
+            "compression-level": 0,
+            "retention-days": 90,
+            "if-no-files-found": "error"
+          }
         }
       ]
     }
