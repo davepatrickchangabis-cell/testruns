@@ -1,0 +1,16 @@
+{
+  "run_id": "fc1daba7-e192-4677-ad88-989e48b75b07",
+  "prepare_id": "a920ce3d-66d3-4822-8d20-39180e70730f",
+  "target": {
+    "host": "github.com",
+    "owner": "ghostfolio",
+    "repo": "ghostfolio",
+    "sha": "069ad389e0b614aecae3e2d230ad1e71e65d9d51"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:2d663c8abd5ee9873e4941008b1736004d97d54f2e7d44b5c9b88c4f0bdf2125"
+  },
+  "prepared_at": "2026-11-07T07:13:12.082Z",
+  "environments": []
+}

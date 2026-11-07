@@ -1,0 +1,14 @@
+{
+  "include": [],
+  "declared": [
+    {
+      "content_key": "5ce1db59aa0e1744ad83860cf358f6f6df96b9e8fd002c04567ac98174255425",
+      "config_name": "ghostfolio-declared",
+      "runner": "ubuntu-latest",
+      "os": "linux",
+      "arch": "x86_64",
+      "libc": null,
+      "python": "3.12"
+    }
+  ]
+}

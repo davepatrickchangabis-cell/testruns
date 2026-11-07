@@ -1,0 +1,14 @@
+{
+  "id": "ghostfolio-declared",
+  "name": "ghostfolio",
+  "repo": "ghostfolio",
+  "source": "https://github.com/ghostfolio/ghostfolio",
+  "out": "out",
+  "sbom": {
+    "technology": "auto",
+    "cdxgen": "cdxgen",
+    "spec_version": "1.7",
+    "requirements": null,
+    "full": false
+  }
+}
