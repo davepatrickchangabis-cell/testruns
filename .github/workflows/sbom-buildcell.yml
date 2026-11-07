@@ -15,12 +15,65 @@
   "permissions": {
     "contents": "read"
   },
+  "concurrency": {
+    "group": "abis-${{ inputs.abis_run_id }}",
+    "cancel-in-progress": true
+  },
   "jobs": {
-    "registered": {
-      "runs-on": "ubuntu-latest",
+    "cell": {
+      "name": "cell (677d68b41c659f39cd7421b0b571e0c05884ae44027036d71be97d6466e776aa, Kavita-macos_arm64-677d68b41c659f39cd7421b0b571e0c05884ae44027036d71be97d6466e776aa)",
+      "runs-on": "macos-latest",
+      "timeout-minutes": 90,
       "steps": [
         {
-          "run": "echo 'Dispatched on an abis/run/<id> ref, the copy on that ref runs; this one only registers the name.'"
+          "name": "Keep line endings as committed",
+          "shell": "bash",
+          "run": "git config --global core.autocrlf false"
+        },
+        {
+          "name": "Check out the target at its pinned commit",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "repository": "Kareadita/Kavita",
+            "ref": "c78f8a8ba5d5870333b1b708e8f23f66ca03041f",
+            "submodules": "recursive",
+            "persist-credentials": false
+          }
+        },
+        {
+          "id": "abis_gate",
+          "name": "Prove the checkout is the snapshot",
+          "shell": "bash",
+          "run": "tree=$(git rev-parse 'HEAD^{tree}')\necho \"checkout tree $tree\"\nif [ \"$tree\" != \"f00a1a0226591510c85d2d62ec019e6c21bfc35f\" ]; then\n  echo \"::error::the checkout's tree $tree is not the snapshot's f00a1a0226591510c85d2d62ec019e6c21bfc35f\"\n  exit 12\nfi"
+        },
+        {
+          "id": "s1",
+          "name": "[recipe] Build fsprobe for osx-arm64",
+          "shell": "bash",
+          "run": "set -euo pipefail\n\n# Locate fsprobe project directory that contains a .csproj\nproject_dir=\"\"\n# Prefer a directory named exactly 'fsprobe' that contains a .csproj\nwhile IFS= read -r d; do\n  if compgen -G \"$d/*.csproj\" > /dev/null; then project_dir=\"$d\"; break; fi\ndone < <(find . -type d -iname 'fsprobe' -print | sort)\n\nif [ -z \"$project_dir\" ]; then\n  # Fallback: any csproj named fsprobe*.csproj\n  csproj=\"$(find . -type f -iname 'fsprobe*.csproj' | head -n1 || true)\"\n  if [ -n \"$csproj\" ]; then project_dir=\"$(cd \"$(dirname \"$csproj\")\" && pwd)\"; fi\nfi\n\nif [ -z \"$project_dir\" ]; then\n  echo \"Could not locate fsprobe project directory\" >&2\n  exit 1\nfi\n\ncd \"$project_dir\"\n\nrm -rf dist\nmkdir -p dist\n\nout=\"dist/fsprobe-osx-arm64\"\ndotnet publish -c Release -r osx-arm64 -o \"$out\" -v q\nif [ -f README.md ]; then cp README.md \"$out/\"; fi\n\n# Package without GNU tar's --mode (not available on macOS bsdtar)\ntar -czf \"dist/fsprobe-osx-arm64.tar.gz\" -C dist \"fsprobe-osx-arm64\"\nls -l dist/*.tar.gz"
+        },
+        {
+          "name": "Measure what the build produced",
+          "if": "always()",
+          "shell": "python",
+          "env": {
+            "ABIS_STEPS": "${{ toJSON(steps) }}",
+            "ABIS_OUT": "${{ runner.temp }}/abis/out",
+            "ABIS_SPEC": "{\"run_id\":\"b4a18dfe-f23b-4b22-8a60-5ff11aed9d4f\",\"content_key\":\"677d68b41c659f39cd7421b0b571e0c05884ae44027036d71be97d6466e776aa\",\"config_name\":\"Kavita-macos_arm64-677d68b41c659f39cd7421b0b571e0c05884ae44027036d71be97d6466e776aa\",\"attempt\":2,\"step_ids\":[\"s1\"],\"artifacts\":[\"**/dist/fsprobe-osx-arm64.tar.gz\"],\"recipe\":{\"runs_on\":\"macos-latest\",\"steps\":[{\"name\":\"Build fsprobe for osx-arm64\",\"run\":\"set -euo pipefail\\n\\n# Locate fsprobe project directory that contains a .csproj\\nproject_dir=\\\"\\\"\\n# Prefer a directory named exactly 'fsprobe' that contains a .csproj\\nwhile IFS= read -r d; do\\n  if compgen -G \\\"$d/*.csproj\\\" > /dev/null; then project_dir=\\\"$d\\\"; break; fi\\ndone < <(find . -type d -iname 'fsprobe' -print | sort)\\n\\nif [ -z \\\"$project_dir\\\" ]; then\\n  # Fallback: any csproj named fsprobe*.csproj\\n  csproj=\\\"$(find . -type f -iname 'fsprobe*.csproj' | head -n1 || true)\\\"\\n  if [ -n \\\"$csproj\\\" ]; then project_dir=\\\"$(cd \\\"$(dirname \\\"$csproj\\\")\\\" && pwd)\\\"; fi\\nfi\\n\\nif [ -z \\\"$project_dir\\\" ]; then\\n  echo \\\"Could not locate fsprobe project directory\\\" >&2\\n  exit 1\\nfi\\n\\ncd \\\"$project_dir\\\"\\n\\nrm -rf dist\\nmkdir -p dist\\n\\nout=\\\"dist/fsprobe-osx-arm64\\\"\\ndotnet publish -c Release -r osx-arm64 -o \\\"$out\\\" -v q\\nif [ -f README.md ]; then cp README.md \\\"$out/\\\"; fi\\n\\n# Package without GNU tar's --mode (not available on macOS bsdtar)\\ntar -czf \\\"dist/fsprobe-osx-arm64.tar.gz\\\" -C dist \\\"fsprobe-osx-arm64\\\"\\nls -l dist/*.tar.gz\",\"shell\":\"bash\"}],\"artifacts\":[\"**/dist/fsprobe-osx-arm64.tar.gz\"],\"citations\":{\"steps\":\"scripts/ProbeCommon/publish.sh\"},\"notes\":\"Builds the fsprobe component for osx-arm64 with dotnet publish and packages it like publish.sh.\"}}"
+          },
+          "run": "import glob, hashlib, json, os, tarfile\nout = os.environ[\"ABIS_OUT\"]\nos.makedirs(out, exist_ok=True)\nspec = json.loads(os.environ[\"ABIS_SPEC\"])\ntry:\n    steps = json.loads(os.environ.get(\"ABIS_STEPS\") or \"{}\")\nexcept ValueError:\n    steps = {}\norder = [\"abis_gate\"] + spec[\"step_ids\"]\noutcomes = {i: (steps.get(i) or {}).get(\"outcome\") for i in order}\nfailed = next((i for i in order if outcomes[i] == \"failure\"), None)\nws = os.environ.get(\"GITHUB_WORKSPACE\", \".\")\nartifacts, missing = [], []\nfor pattern in spec[\"artifacts\"]:\n    hits = sorted(p for p in glob.glob(os.path.join(ws, pattern), recursive=True) if os.path.isfile(p))\n    if not hits:\n        missing.append(pattern)\n    for p in hits[:200]:\n        h = hashlib.sha256()\n        with open(p, \"rb\") as f:\n            for chunk in iter(lambda: f.read(1 << 20), b\"\"):\n                h.update(chunk)\n        artifacts.append({\"pattern\": pattern, \"path\": os.path.relpath(p, ws).replace(os.sep, \"/\"),\n                          \"sha256\": h.hexdigest(), \"bytes\": os.path.getsize(p)})\nran = all(outcomes[i] == \"success\" for i in order)\nresult = {\"schema\": \"abis-buildcell-result/1\", \"run_id\": spec[\"run_id\"], \"content_key\": spec[\"content_key\"],\n          \"config_name\": spec[\"config_name\"], \"attempt\": spec[\"attempt\"], \"steps\": outcomes,\n          \"failed_step\": failed, \"artifacts\": artifacts, \"missing\": missing,\n          \"built\": ran and bool(artifacts) and not missing}\nwith open(os.path.join(out, \"result.json\"), \"w\") as f:\n    json.dump(result, f, indent=2)\nwith open(os.path.join(out, \"recipe.json\"), \"w\") as f:\n    json.dump(spec[\"recipe\"], f, indent=2)\nwith tarfile.open(os.path.join(os.path.dirname(out), \"bundle.tar.gz\"), \"w:gz\") as t:\n    t.add(out, arcname=\"out\")\nprint(json.dumps(result, indent=2))\n"
+        },
+        {
+          "name": "Upload the evidence bundle",
+          "if": "always()",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "bundle-677d68b41c659f39cd7421b0b571e0c05884ae44027036d71be97d6466e776aa",
+            "path": "${{ runner.temp }}/abis/bundle.tar.gz",
+            "compression-level": 0,
+            "retention-days": 90,
+            "if-no-files-found": "error"
+          }
         }
       ]
     }
