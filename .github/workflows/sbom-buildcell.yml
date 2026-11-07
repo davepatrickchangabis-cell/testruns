@@ -15,12 +15,128 @@
   "permissions": {
     "contents": "read"
   },
+  "concurrency": {
+    "group": "abis-${{ inputs.abis_run_id }}",
+    "cancel-in-progress": true
+  },
   "jobs": {
-    "registered": {
-      "runs-on": "ubuntu-latest",
+    "cell": {
+      "name": "cell (70cfdf2d268ec5456e173e399ce15f04bf73e05ec7343879f56eb4acaabcead2, paperless-ngx-linux_arm64-70cfdf2d268ec5456e173e399ce15f04bf73e05ec7343879f56eb4acaabcead2)",
+      "runs-on": "ubuntu-26.04-arm",
+      "timeout-minutes": 90,
       "steps": [
         {
-          "run": "echo 'Dispatched on an abis/run/<id> ref, the copy on that ref runs; this one only registers the name.'"
+          "name": "Keep line endings as committed",
+          "shell": "bash",
+          "run": "git config --global core.autocrlf false"
+        },
+        {
+          "name": "Check out the target at its pinned commit",
+          "uses": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+          "with": {
+            "repository": "paperless-ngx/paperless-ngx",
+            "ref": "19fdc3b815cdcaf0ad869557c45c27ef7d2215b3",
+            "submodules": "recursive",
+            "persist-credentials": false
+          }
+        },
+        {
+          "id": "abis_gate",
+          "name": "Prove the checkout is the snapshot",
+          "shell": "bash",
+          "run": "tree=$(git rev-parse 'HEAD^{tree}')\necho \"checkout tree $tree\"\nif [ \"$tree\" != \"990be9abe310a01a54ea2d13779aa74a3eef4529\" ]; then\n  echo \"::error::the checkout's tree $tree is not the snapshot's 990be9abe310a01a54ea2d13779aa74a3eef4529\"\n  exit 12\nfi"
+        },
+        {
+          "id": "s1",
+          "name": "[recipe] Determine ref name",
+          "shell": "bash",
+          "run": "ref_name=\"${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}\"\n# Sanitize by replacing / with - for use in tags and cache keys\nsanitized_ref=\"${ref_name//\\//-}\"\n\necho \"ref_name=${ref_name}\"\necho \"sanitized_ref=${sanitized_ref}\"\n\necho \"name=${sanitized_ref}\" >> $GITHUB_OUTPUT\necho \"REF_NAME=${sanitized_ref}\" >> $GITHUB_ENV"
+        },
+        {
+          "id": "s2",
+          "name": "[recipe] Check push permissions",
+          "shell": "bash",
+          "run": "# should-push: Should we push to GHCR?\n# True for:\n#   1. Pushes (tags/dev/beta) - filtered via the workflow triggers\n#   2. Manual dispatch - always push to GHCR\n#   3. Internal PRs where the branch name starts with 'feature-' or 'fix-'\n\n# Derive ref name (sanitized)\nref_name=\"${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}\"\nsan_ref=\"${ref_name//\\//-}\"\n\nshould_push=\"false\"\nif [[ \"${GITHUB_EVENT_NAME}\" == \"push\" ]]; then\n  should_push=\"true\"\nelif [[ \"${GITHUB_EVENT_NAME}\" == \"workflow_dispatch\" ]]; then\n  should_push=\"true\"\nelif [[ \"${GITHUB_EVENT_NAME}\" == \"pull_request\" ]]; then\n  pr_repo=\"$(python - <<'PY'\nimport json, os\np=os.environ.get('GITHUB_EVENT_PATH')\ntry:\n    with open(p,'r') as f:\n        d=json.load(f)\n    print(d.get('pull_request',{}).get('head',{}).get('repo',{}).get('full_name',''))\nexcept Exception:\n    print('')\nPY\n)\"\n  if [[ \"${pr_repo}\" == \"${GITHUB_REPOSITORY}\" ]]; then\n    if [[ \"${san_ref}\" == feature-* || \"${san_ref}\" == fix-* ]]; then\n      should_push=\"true\"\n    fi\n  fi\nfi\n\necho \"should-push=${should_push}\"\necho \"should-push=${should_push}\" >> $GITHUB_OUTPUT\necho \"SHOULD_PUSH=${should_push}\" >> $GITHUB_ENV\n\n# push-external: Should we also push to Docker Hub and Quay.io?\n# Only for main repo on dev/beta branches or version tags\npush_external=\"false\"\nif [[ \"${should_push}\" == \"true\" && \"${GITHUB_REPOSITORY_OWNER}\" == \"paperless-ngx\" ]]; then\n  case \"${san_ref}\" in\n    dev|beta)\n      push_external=\"true\"\n      ;;\n  esac\n  case \"${GITHUB_REF}\" in\n    refs/tags/v*|*beta.rc*)\n      push_external=\"true\"\n      ;;\n  esac\nfi\necho \"push-external=${push_external}\"\necho \"push-external=${push_external}\" >> $GITHUB_OUTPUT\necho \"PUSH_EXTERNAL=${push_external}\" >> $GITHUB_ENV"
+        },
+        {
+          "id": "s3",
+          "name": "[recipe] Set repository name",
+          "shell": "bash",
+          "run": "repo_name=\"${GITHUB_REPOSITORY}\"\nrepo_name=\"${repo_name,,}\"\n\necho \"repository=${repo_name}\"\necho \"name=${repo_name}\" >> $GITHUB_OUTPUT\necho \"REPO_NAME_LOWER=${repo_name}\" >> $GITHUB_ENV"
+        },
+        {
+          "id": "s4",
+          "name": "[recipe] Set up Docker Buildx",
+          "uses": "docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069"
+        },
+        {
+          "id": "s5",
+          "name": "[recipe] Login to GitHub Container Registry",
+          "uses": "docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6",
+          "with": {
+            "registry": "ghcr.io",
+            "username": "${GITHUB_ACTOR}",
+            "password": "${GITHUB_TOKEN}"
+          }
+        },
+        {
+          "id": "s6",
+          "name": "[recipe] Maximize space",
+          "shell": "bash",
+          "run": "sudo rm -rf /usr/share/dotnet\nsudo rm -rf /opt/ghc\nsudo rm -rf /usr/local/share/boost\nsudo rm -rf \"$AGENT_TOOLSDIRECTORY\""
+        },
+        {
+          "id": "s7",
+          "name": "[recipe] Docker metadata",
+          "uses": "docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302",
+          "with": {
+            "images": "ghcr.io/${REPO_NAME_LOWER}",
+            "tags": "type=ref,event=branch\ntype=raw,value=dev,enable=false\ntype=semver,pattern={{version}}\ntype=semver,pattern={{major}}.{{minor}}"
+          }
+        },
+        {
+          "id": "s8",
+          "name": "[recipe] Build and push by digest",
+          "uses": "docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc",
+          "with": {
+            "context": ".",
+            "file": "./Dockerfile",
+            "platforms": "linux/arm64",
+            "labels": "${DOCKER_METADATA_OUTPUT_LABELS}",
+            "build-args": "PNGX_TAG_VERSION=dev",
+            "outputs": "type=image,name=ghcr.io/${REPO_NAME_LOWER},push-by-digest=true,name-canonical=true,push=${SHOULD_PUSH}",
+            "cache-from": "type=registry,ref=ghcr.io/${REPO_NAME_LOWER}/cache/app:${REF_NAME}-arm64\ntype=registry,ref=ghcr.io/${REPO_NAME_LOWER}/cache/app:dev-arm64",
+            "cache-to": "type=registry,mode=max,ref=ghcr.io/${REPO_NAME_LOWER}/cache/app:${REF_NAME}-arm64"
+          }
+        },
+        {
+          "id": "s9",
+          "name": "[recipe] Export digest",
+          "shell": "bash",
+          "run": "mkdir -p /tmp/digests\necho \"digest=${BUILD_DIGEST}\"\necho \"${BUILD_DIGEST}\" > \"/tmp/digests/digest-arm64.txt\""
+        },
+        {
+          "name": "Measure what the build produced",
+          "if": "always()",
+          "shell": "python",
+          "env": {
+            "ABIS_STEPS": "${{ toJSON(steps) }}",
+            "ABIS_OUT": "${{ runner.temp }}/abis/out",
+            "ABIS_SPEC": "{\"run_id\":\"fe8784b3-2b61-46d0-9f5f-bd643ee5887a\",\"content_key\":\"70cfdf2d268ec5456e173e399ce15f04bf73e05ec7343879f56eb4acaabcead2\",\"config_name\":\"paperless-ngx-linux_arm64-70cfdf2d268ec5456e173e399ce15f04bf73e05ec7343879f56eb4acaabcead2\",\"attempt\":2,\"step_ids\":[\"s1\",\"s2\",\"s3\",\"s4\",\"s5\",\"s6\",\"s7\",\"s8\",\"s9\"],\"artifacts\":[\"tmp/digests/digest-arm64.txt\"],\"recipe\":{\"runs_on\":\"ubuntu-26.04-arm\",\"steps\":[{\"name\":\"Determine ref name\",\"run\":\"ref_name=\\\"${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}\\\"\\n# Sanitize by replacing / with - for use in tags and cache keys\\nsanitized_ref=\\\"${ref_name//\\\\//-}\\\"\\n\\necho \\\"ref_name=${ref_name}\\\"\\necho \\\"sanitized_ref=${sanitized_ref}\\\"\\n\\necho \\\"name=${sanitized_ref}\\\" >> $GITHUB_OUTPUT\\necho \\\"REF_NAME=${sanitized_ref}\\\" >> $GITHUB_ENV\",\"shell\":\"bash\"},{\"name\":\"Check push permissions\",\"run\":\"# should-push: Should we push to GHCR?\\n# True for:\\n#   1. Pushes (tags/dev/beta) - filtered via the workflow triggers\\n#   2. Manual dispatch - always push to GHCR\\n#   3. Internal PRs where the branch name starts with 'feature-' or 'fix-'\\n\\n# Derive ref name (sanitized)\\nref_name=\\\"${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}\\\"\\nsan_ref=\\\"${ref_name//\\\\//-}\\\"\\n\\nshould_push=\\\"false\\\"\\nif [[ \\\"${GITHUB_EVENT_NAME}\\\" == \\\"push\\\" ]]; then\\n  should_push=\\\"true\\\"\\nelif [[ \\\"${GITHUB_EVENT_NAME}\\\" == \\\"workflow_dispatch\\\" ]]; then\\n  should_push=\\\"true\\\"\\nelif [[ \\\"${GITHUB_EVENT_NAME}\\\" == \\\"pull_request\\\" ]]; then\\n  pr_repo=\\\"$(python - <<'PY'\\nimport json, os\\np=os.environ.get('GITHUB_EVENT_PATH')\\ntry:\\n    with open(p,'r') as f:\\n        d=json.load(f)\\n    print(d.get('pull_request',{}).get('head',{}).get('repo',{}).get('full_name',''))\\nexcept Exception:\\n    print('')\\nPY\\n)\\\"\\n  if [[ \\\"${pr_repo}\\\" == \\\"${GITHUB_REPOSITORY}\\\" ]]; then\\n    if [[ \\\"${san_ref}\\\" == feature-* || \\\"${san_ref}\\\" == fix-* ]]; then\\n      should_push=\\\"true\\\"\\n    fi\\n  fi\\nfi\\n\\necho \\\"should-push=${should_push}\\\"\\necho \\\"should-push=${should_push}\\\" >> $GITHUB_OUTPUT\\necho \\\"SHOULD_PUSH=${should_push}\\\" >> $GITHUB_ENV\\n\\n# push-external: Should we also push to Docker Hub and Quay.io?\\n# Only for main repo on dev/beta branches or version tags\\npush_external=\\\"false\\\"\\nif [[ \\\"${should_push}\\\" == \\\"true\\\" && \\\"${GITHUB_REPOSITORY_OWNER}\\\" == \\\"paperless-ngx\\\" ]]; then\\n  case \\\"${san_ref}\\\" in\\n    dev|beta)\\n      push_external=\\\"true\\\"\\n      ;;\\n  esac\\n  case \\\"${GITHUB_REF}\\\" in\\n    refs/tags/v*|*beta.rc*)\\n      push_external=\\\"true\\\"\\n      ;;\\n  esac\\nfi\\necho \\\"push-external=${push_external}\\\"\\necho \\\"push-external=${push_external}\\\" >> $GITHUB_OUTPUT\\necho \\\"PUSH_EXTERNAL=${push_external}\\\" >> $GITHUB_ENV\",\"shell\":\"bash\"},{\"name\":\"Set repository name\",\"run\":\"repo_name=\\\"${GITHUB_REPOSITORY}\\\"\\nrepo_name=\\\"${repo_name,,}\\\"\\n\\necho \\\"repository=${repo_name}\\\"\\necho \\\"name=${repo_name}\\\" >> $GITHUB_OUTPUT\\necho \\\"REPO_NAME_LOWER=${repo_name}\\\" >> $GITHUB_ENV\",\"shell\":\"bash\"},{\"name\":\"Set up Docker Buildx\",\"uses\":\"docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069\"},{\"name\":\"Login to GitHub Container Registry\",\"uses\":\"docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6\",\"with\":{\"registry\":\"ghcr.io\",\"username\":\"${GITHUB_ACTOR}\",\"password\":\"${GITHUB_TOKEN}\"}},{\"name\":\"Maximize space\",\"run\":\"sudo rm -rf /usr/share/dotnet\\nsudo rm -rf /opt/ghc\\nsudo rm -rf /usr/local/share/boost\\nsudo rm -rf \\\"$AGENT_TOOLSDIRECTORY\\\"\",\"shell\":\"bash\"},{\"name\":\"Docker metadata\",\"uses\":\"docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302\",\"with\":{\"images\":\"ghcr.io/${REPO_NAME_LOWER}\",\"tags\":\"type=ref,event=branch\\ntype=raw,value=dev,enable=false\\ntype=semver,pattern={{version}}\\ntype=semver,pattern={{major}}.{{minor}}\"}},{\"name\":\"Build and push by digest\",\"uses\":\"docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc\",\"with\":{\"context\":\".\",\"file\":\"./Dockerfile\",\"platforms\":\"linux/arm64\",\"labels\":\"${DOCKER_METADATA_OUTPUT_LABELS}\",\"build-args\":\"PNGX_TAG_VERSION=dev\",\"outputs\":\"type=image,name=ghcr.io/${REPO_NAME_LOWER},push-by-digest=true,name-canonical=true,push=${SHOULD_PUSH}\",\"cache-from\":\"type=registry,ref=ghcr.io/${REPO_NAME_LOWER}/cache/app:${REF_NAME}-arm64\\ntype=registry,ref=ghcr.io/${REPO_NAME_LOWER}/cache/app:dev-arm64\",\"cache-to\":\"type=registry,mode=max,ref=ghcr.io/${REPO_NAME_LOWER}/cache/app:${REF_NAME}-arm64\"}},{\"name\":\"Export digest\",\"run\":\"mkdir -p /tmp/digests\\necho \\\"digest=${BUILD_DIGEST}\\\"\\necho \\\"${BUILD_DIGEST}\\\" > \\\"/tmp/digests/digest-arm64.txt\\\"\",\"shell\":\"bash\"}],\"artifacts\":[\"tmp/digests/digest-arm64.txt\"],\"citations\":{\"steps\":\".github/workflows/ci-docker.yml\"},\"notes\":\"Builds the linux/arm64 Docker image and writes a digest file for publishing when enabled.\"}}"
+          },
+          "run": "import glob, hashlib, json, os, tarfile\nout = os.environ[\"ABIS_OUT\"]\nos.makedirs(out, exist_ok=True)\nspec = json.loads(os.environ[\"ABIS_SPEC\"])\ntry:\n    steps = json.loads(os.environ.get(\"ABIS_STEPS\") or \"{}\")\nexcept ValueError:\n    steps = {}\norder = [\"abis_gate\"] + spec[\"step_ids\"]\noutcomes = {i: (steps.get(i) or {}).get(\"outcome\") for i in order}\nfailed = next((i for i in order if outcomes[i] == \"failure\"), None)\nws = os.environ.get(\"GITHUB_WORKSPACE\", \".\")\nartifacts, missing = [], []\nfor pattern in spec[\"artifacts\"]:\n    hits = sorted(p for p in glob.glob(os.path.join(ws, pattern), recursive=True) if os.path.isfile(p))\n    if not hits:\n        missing.append(pattern)\n    for p in hits[:200]:\n        h = hashlib.sha256()\n        with open(p, \"rb\") as f:\n            for chunk in iter(lambda: f.read(1 << 20), b\"\"):\n                h.update(chunk)\n        artifacts.append({\"pattern\": pattern, \"path\": os.path.relpath(p, ws).replace(os.sep, \"/\"),\n                          \"sha256\": h.hexdigest(), \"bytes\": os.path.getsize(p)})\nran = all(outcomes[i] == \"success\" for i in order)\nresult = {\"schema\": \"abis-buildcell-result/1\", \"run_id\": spec[\"run_id\"], \"content_key\": spec[\"content_key\"],\n          \"config_name\": spec[\"config_name\"], \"attempt\": spec[\"attempt\"], \"steps\": outcomes,\n          \"failed_step\": failed, \"artifacts\": artifacts, \"missing\": missing,\n          \"built\": ran and bool(artifacts) and not missing}\nwith open(os.path.join(out, \"result.json\"), \"w\") as f:\n    json.dump(result, f, indent=2)\nwith open(os.path.join(out, \"recipe.json\"), \"w\") as f:\n    json.dump(spec[\"recipe\"], f, indent=2)\nwith tarfile.open(os.path.join(os.path.dirname(out), \"bundle.tar.gz\"), \"w:gz\") as t:\n    t.add(out, arcname=\"out\")\nprint(json.dumps(result, indent=2))\n"
+        },
+        {
+          "name": "Upload the evidence bundle",
+          "if": "always()",
+          "uses": "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+          "with": {
+            "name": "bundle-70cfdf2d268ec5456e173e399ce15f04bf73e05ec7343879f56eb4acaabcead2",
+            "path": "${{ runner.temp }}/abis/bundle.tar.gz",
+            "compression-level": 0,
+            "retention-days": 90,
+            "if-no-files-found": "error"
+          }
         }
       ]
     }
