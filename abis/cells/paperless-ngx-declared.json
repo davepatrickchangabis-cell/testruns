@@ -1,0 +1,14 @@
+{
+  "id": "paperless-ngx-declared",
+  "name": "paperless-ngx",
+  "repo": "paperless-ngx",
+  "source": "https://github.com/paperless-ngx/paperless-ngx",
+  "out": "out",
+  "sbom": {
+    "technology": "auto",
+    "cdxgen": "cdxgen",
+    "spec_version": "1.7",
+    "requirements": null,
+    "full": false
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "run_id": "1e79c6f2-13b7-45c9-ac22-5406dfe1bdd7",
+  "prepare_id": "f0327dc5-02af-4990-9396-27f0a45b470e",
+  "target": {
+    "host": "github.com",
+    "owner": "paperless-ngx",
+    "repo": "paperless-ngx",
+    "sha": "19fdc3b815cdcaf0ad869557c45c27ef7d2215b3"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:2d663c8abd5ee9873e4941008b1736004d97d54f2e7d44b5c9b88c4f0bdf2125"
+  },
+  "prepared_at": "2026-11-07T07:43:57.089Z",
+  "environments": []
+}
