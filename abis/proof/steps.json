@@ -1,0 +1,76 @@
+[
+  {
+    "name": "Install frontend dependencies",
+    "run": "cd src-ui && pnpm install",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "Build frontend",
+    "run": "cd src-ui && pnpm run build --configuration production",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "Install Python dependencies",
+    "run": "uv sync --python \"${PYTHON_VERSION}\" --dev --frozen",
+    "shell": "bash",
+    "phase": "build",
+    "env": {
+      "PYTHON_VERSION": "3.12"
+    }
+  },
+  {
+    "name": "Install system dependencies",
+    "run": "sudo apt-get update && sudo apt-get install -y --no-install-recommends gettext libleptonica6",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "Build documentation",
+    "run": "uv run \\\n  --python \"${PYTHON_VERSION}\" \\\n  --dev \\\n  --frozen \\\n  zensical build --clean",
+    "shell": "bash",
+    "phase": "build",
+    "env": {
+      "PYTHON_VERSION": "3.12"
+    }
+  },
+  {
+    "name": "Generate requirements file",
+    "run": "uv export --quiet --no-dev --all-extras --emit-index-url --format requirements-txt --output-file requirements.txt",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "Compile messages",
+    "run": "cd src/\nuv run \\\n  --python \"${PYTHON_VERSION}\" \\\n  manage.py compilemessages",
+    "shell": "bash",
+    "phase": "build",
+    "env": {
+      "PYTHON_VERSION": "3.12",
+      "PAPERLESS_SECRET_KEY": "ci-release-not-a-real-secret"
+    }
+  },
+  {
+    "name": "Collect static files",
+    "run": "cd src/\nuv run \\\n  --python \"${PYTHON_VERSION}\" \\\n  manage.py collectstatic --no-input --clear",
+    "shell": "bash",
+    "phase": "build",
+    "env": {
+      "PYTHON_VERSION": "3.12",
+      "PAPERLESS_SECRET_KEY": "ci-release-not-a-real-secret"
+    }
+  },
+  {
+    "name": "Assemble release package",
+    "run": "mkdir -p dist/paperless-ngx/scripts\n\nfor file_name in .dockerignore \\\n                .env \\\n                Dockerfile \\\n                pyproject.toml \\\n                uv.lock \\\n                requirements.txt \\\n                LICENSE \\\n                README.md \\\n                paperless.conf.example\n\ndo\n  cp --verbose ${file_name} dist/paperless-ngx/\ndone\nmv dist/paperless-ngx/paperless.conf.example dist/paperless-ngx/paperless.conf\n\ncp --recursive docker/ dist/paperless-ngx/docker\ncp scripts/*.service scripts/*.sh scripts/*.socket dist/paperless-ngx/scripts/\ncp --recursive src/ dist/paperless-ngx/src\ncp --recursive site/ dist/paperless-ngx/docs\nmv static dist/paperless-ngx/\n\nfind dist/paperless-ngx -name \"__pycache__\" -type d -exec rm -rf {} +",
+    "shell": "bash",
+    "phase": "build"
+  },
+  {
+    "name": "Create release archive",
+    "run": "cd dist\nsudo chown -R 1000:1000 paperless-ngx/\ntar -cJf paperless-ngx.tar.xz paperless-ngx/",
+    "shell": "bash",
+    "phase": "build"
+  }
+]

@@ -1,0 +1,33 @@
+{
+  "adapter": "cc",
+  "build_cmd": "\"$ABIS_PYTHON\" \"$ABIS_RECIPE\" build",
+  "test_cmd": "",
+  "clean_cmd": "",
+  "artifacts": [
+    "dist/paperless-ngx.tar.xz"
+  ],
+  "test_artifacts": [],
+  "keep": [
+    "*Makefile",
+    "*makefile",
+    "*GNUmakefile",
+    "*.mk",
+    "*CMakeLists.txt",
+    "*.cmake",
+    "*.in",
+    "*.am",
+    "*.ac",
+    "*configure",
+    "*meson.build",
+    "*meson_options.txt",
+    "*meson.options",
+    "*Kbuild",
+    "*Kbuild.*",
+    "*Kconfig",
+    "*Kconfig.*",
+    "paperless.conf.example",
+    "pyproject.toml",
+    "README.md",
+    "uv.lock"
+  ]
+}
