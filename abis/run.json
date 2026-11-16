@@ -1,0 +1,16 @@
+{
+  "run_id": "097cc3f1-18d0-4559-90c8-084c1538ca05",
+  "prepare_id": "6300f152-f5a2-4f90-969a-4b09276ecf51",
+  "target": {
+    "host": "github.com",
+    "owner": "numpy",
+    "repo": "numpy",
+    "sha": "fcb01c9e164bb7f4669c1ec73c645783a68c523e"
+  },
+  "module": {
+    "name": "sbom",
+    "digest": "sha256:2d663c8abd5ee9873e4941008b1736004d97d54f2e7d44b5c9b88c4f0bdf2125"
+  },
+  "prepared_at": "2026-11-16T11:24:58.341Z",
+  "environments": []
+}

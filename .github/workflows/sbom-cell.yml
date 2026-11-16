@@ -5,7 +5,7 @@
 # committed into the ref, so dispatch carries ONE input and a 42-cell matrix
 # cannot hit the dispatch input size limit.
 #
-# THE ORDER OF THE LAST THREE STEPS IS LOAD-BEARING. Evidence is uploaded
+# THE ORDER OF THE FINAL STEPS IS LOAD-BEARING. Evidence is uploaded
 # BEFORE the job is failed. A cell that exits 1, 2 or 3 is a finding the
 # customer needs, and a finding with no retained evidence behind it is a demo.
 
@@ -29,21 +29,54 @@ defaults:
   run:
     shell: bash
 
+# THE COST CEILING LIVES HERE FIRST, because GitHub enforces this file whether
+# or not anything on our side is running — and the bug that prompted it is
+# precisely that nothing on our side was. Run 40b93ffc failed on GitHub after
+# 41 minutes and the server showed it as `running` for 3.9 days, because the
+# worker that polls exited six seconds after the run's first poll.
+#
+# `timeout-minutes` on each job below is the part that matters: it bounds the
+# spend. This concurrency group is narrower than it looks — one `abis_run_id`
+# is dispatched once, so it cannot collide with another run. What it does stop
+# is the same run id being dispatched a second time by hand from the Actions
+# tab, which starts a second 42-cell matrix charging alongside the first and is
+# the one double-spend a person can cause by clicking Re-run.
+concurrency:
+  group: abis-${{ inputs.abis_run_id }}
+  cancel-in-progress: true
+
 jobs:
   matrix:
     runs-on: ubuntu-latest
+    # Reads one JSON file. A minute is already generous; anything longer is a
+    # runner that is not coming back, and it is holding 42 cells behind it.
+    timeout-minutes: 5
     outputs:
       include: ${{ steps.read.outputs.include }}
+      declared: ${{ steps.read.outputs.declared }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.ref }}
           persist-credentials: false
+      # `// []` so a bundle written before abis/matrix.json carried `declared`
+      # yields an empty list rather than the string "null", which the guards
+      # below compare against and which would read as "there is one".
       - id: read
-        run: echo "include=$(jq -c '.include' abis/matrix.json)" >> "$GITHUB_OUTPUT"
+        run: |
+          {
+            echo "include=$(jq -c '.include // []' abis/matrix.json)"
+            echo "declared=$(jq -c '.declared // []' abis/matrix.json)"
+          } >> "$GITHUB_OUTPUT"
 
   cell:
+    name: cell (${{ matrix.content_key }})
     needs: matrix
+    # A declared-only run has no build cells, and GitHub fails a job whose
+    # matrix include is empty ("Matrix vector 'include' does not contain any
+    # values") rather than skipping it. The guard is what lets one workflow
+    # serve both kinds of run.
+    if: needs.matrix.outputs.include != '[]'
     strategy:
       # "This configuration does not build" is a finding; cancelling the matrix
       # destroys 41 good results to report one bad one.
@@ -51,12 +84,46 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.matrix.outputs.include) }}
     runs-on: ${{ matrix.runner }}
+    # THE JOB'S OWN LIMIT, and its absence is what made this a cost trap rather
+    # than a bounded one. The pipeline step below is capped at 320 minutes;
+    # every other step — apt-get, pip, npm, three checkouts, one of them
+    # `submodules: recursive` against a repository we do not control — was
+    # capped at nothing, which means GitHub's default of 360 minutes EACH.
+    # Multiply by 42 cells, at 2× for the 18 Windows ones, and an accident
+    # invoices like a fleet.
+    #
+    # 330 sits just above the pipeline's own 320 on purpose: the pipeline must
+    # be the thing that times out, because its timeout leaves the `always()`
+    # evidence steps to run and produce a bundle explaining the overrun. A job
+    # killed at the job level takes them with it, so this number's only job is
+    # to be the backstop that never fires first.
+    timeout-minutes: 330
     steps:
+      - name: Initialize evidence
+        env:
+          ABIS_RUN_ID: ${{ inputs.abis_run_id }}
+          ABIS_CONTENT_KEY: ${{ matrix.content_key }}
+          ABIS_CONFIG_NAME: ${{ matrix.config_name }}
+        run: |
+          mkdir -p out
+          jq -n --arg run_id "$ABIS_RUN_ID" --arg content_key "$ABIS_CONTENT_KEY" \
+            --arg config_name "$ABIS_CONFIG_NAME" --argjson gh_run_id "$GITHUB_RUN_ID" \
+            --argjson attempt "$GITHUB_RUN_ATTEMPT" '$ARGS.named' > out/attempt.json
+          echo 99 > out/exit_code
+          echo '{"stage":"workflow-setup","exit_code":99,"reason":"Setup did not complete; see Actions logs"}' > out/execution-status.json
+
+      # This intentionally comes before checkout: a failed checkout must still
+      # produce an artifact bound to this exact workflow attempt.
       - name: Check out the run ref (our pipeline — never the target's code)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.ref }}
           persist-credentials: false
+
+      - name: Verify container preparation helpers
+        if: ${{ matrix.environment_path != '' }}
+        working-directory: abis/runtime
+        run: sha256sum --check --strict SHA256SUMS
 
       # Fail closed before a single zipapp executes.
       - name: Verify the zipapps against SHA256SUMS
@@ -83,18 +150,49 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
+
       - name: Set up Python ${{ matrix.python }}
+        if: ${{ matrix.environment_path == '' }}
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
 
       # Hosted-runner path. In the container path these live in the pinned
       # manylinux image and this step disappears.
+      # SYSTEM libarchive FIRST, on Linux. ScanCode reaches archives through
+      # extractcode-libarchive, whose wheel bundles a native library — and on
+      # linux-aarch64 that binding loads and then fails on the first call with
+      # "undefined symbol: archive_read_new". Measured on
+      # numpy-linux_aarch64_cp312: scancode exited 1 after 10s with no usable
+      # JSON report, 90 seconds into a paid runner.
+      #
+      # The distribution's own libarchive is built for the architecture it ships
+      # on, which is the whole point of using it instead of a bundled blob.
+      # Installing it costs a few seconds and makes aarch64 a platform this
+      # scans rather than one it skips — excluding those 12 cells would have
+      # hidden the problem, not solved it.
       - name: Provision the scan tools
+        if: ${{ matrix.environment_path == '' }}
         run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq libarchive-dev libarchive13
+            # extractcode looks here before falling back to its bundled copy.
+            echo "EXTRACTCODE_LIBARCHIVE_PATH=$(ls /usr/lib/*/libarchive.so.13 2>/dev/null | head -1)" >> "$GITHUB_ENV"
+          fi
           python -m pip install --upgrade pip
           python -m pip install scancode-toolkit
           npm install --global @cyclonedx/cdxgen
+
+      # Proves the tool actually loads before 45 minutes of scanning depends on
+      # it. A native binding that imports and then dies on first use is exactly
+      # the failure that is cheap here and expensive later.
+      - name: Check the scanner loads
+        if: ${{ matrix.environment_path == '' }}
+        run: |
+          python -c "import extractcode_libarchive, sys; print('libarchive OK:', extractcode_libarchive.get_location())" || \
+            echo "::warning::extractcode-libarchive did not load; archive extraction may fail"
+          scancode --version
 
       - name: Record the runner image
         run: |
@@ -107,33 +205,425 @@ jobs:
                 '$ARGS.named' > out/runner.json
 
       - name: Resolve the cell config
+        if: ${{ matrix.environment_path == '' }}
         run: |
-          jq --arg ws "$GITHUB_WORKSPACE" \
-             '.repo = $ws + "/" + .repo | .out = $ws + "/" + .out' \
+          # NumPy pins a Meson fork that supplies build-system modules absent
+          # from the hosted runner's global Meson.  The wrapper binds the
+          # validated entrypoint to this target checkout: it can consequently
+          # be called from the workspace during preflight and from a temporary
+          # directory when pytest deliberately tests the installed package.
+          meson_path="$(python - "${{ steps.run.outputs.target_name }}" <<'PY'
+          import pathlib
+          import sys
+          import tomllib
+
+          root = pathlib.Path(sys.argv[1]).resolve()
+          pyproject = root / "pyproject.toml"
+          if not pyproject.is_file():
+              raise SystemExit(0)
+          try:
+              meson = tomllib.loads(pyproject.read_text(encoding="utf-8")).get("tool", {}).get("meson-python", {}).get("meson")
+          except (OSError, tomllib.TOMLDecodeError) as error:
+              raise SystemExit(f"Cannot read {pyproject}: {error}")
+          if meson is None:
+              raise SystemExit(0)
+          if not isinstance(meson, str) or not meson:
+              raise SystemExit("tool.meson-python.meson must be a non-empty string")
+          executable = (root / meson).resolve()
+          if not executable.is_relative_to(root) or not executable.is_file():
+              raise SystemExit(f"Configured Meson executable is missing or unsafe: {meson}")
+          print(executable.relative_to(root))
+          PY
+          )"
+          meson_wrapper=""
+          if [ -n "$meson_path" ]; then
+            mkdir -p out/abis-tools
+            python - "out/abis-tools/meson" "${{ steps.run.outputs.target_name }}" "$meson_path" <<'PY'
+          import pathlib
+          import sys
+
+          wrapper, root, relative = map(pathlib.Path, sys.argv[1:])
+          executable = (root.resolve() / relative).resolve()
+          wrapper.write_text(
+              "#!/usr/bin/env python3\n"
+              "import os, sys\n"
+              f"os.execv(sys.executable, [sys.executable, {str(executable)!r}, *sys.argv[1:]])\n",
+              encoding="utf-8")
+          wrapper.chmod(0o755)
+          PY
+            meson_wrapper="$GITHUB_WORKSPACE/out/abis-tools"
+            "$meson_wrapper/meson" --version
+          fi
+          # `pytest --pyargs package` deliberately imports the installed
+          # package.  The checkout would otherwise take precedence on
+          # sys.path, which breaks projects whose source tree lacks generated
+          # modules (for example NumPy's `version.py`).
+          jq --arg ws "$GITHUB_WORKSPACE" --arg test_cwd "$RUNNER_TEMP" \
+             --arg meson_wrapper "$meson_wrapper" \
+             '.repo = $ws + "/" + .repo | .out = $ws + "/" + .out
+              | if (.build.test_cmd | contains("--pyargs"))
+                then .build.test_cmd = ("ABIS_SOURCE_ROOT=$PWD; export ABIS_SOURCE_ROOT; cd "
+                  + ($test_cwd | @sh) + " && " + .build.test_cmd)
+                else .
+                end
+              | if $meson_wrapper == "" then .
+                else .build |= with_entries(
+                  if (.key == "build_cmd" or .key == "test_cmd" or .key == "clean_cmd")
+                  and (.value | type) == "string" and (.value | length) > 0
+                  then .value = ("PATH=" + $meson_wrapper + ":$PATH; export PATH; " + .value)
+                  else . end)
+                end' \
              "abis/cells/${{ matrix.config_name }}.json" \
              > "out/${{ matrix.config_name }}.json"
           cat "out/${{ matrix.config_name }}.json"
+
+      # `--no-build-isolation` is deliberate: ABIS must rebuild the exact
+      # dependency environment it inspected, rather than letting pip create
+      # an unrecorded temporary one. On hosted runners, install the cell's
+      # cited build requirements into the interpreter that runs the pipeline.
+      # (Container cells do this through their explicit preparation receipt.)
+      - name: Prepare host build dependencies
+        if: ${{ matrix.environment_path == '' }}
+        id: host_preparation
+        continue-on-error: true
+        run: |
+          prepare() {
+            local config requirements requirements_path
+            config="out/${{ matrix.config_name }}.json"
+            requirements="$(jq -r '
+              if .sbom.requirements == null then ""
+              elif (.sbom.requirements | type) == "string" then .sbom.requirements
+              else error("sbom.requirements must be a string or null")
+              end
+            ' "$config")" || return $?
+            if [ -z "$requirements" ]; then
+              echo "No host build-requirements file declared for this cell."
+              return 0
+            fi
+            case "$requirements" in
+              /*|../*|*/../*|*/..) echo "Unsafe build-requirements path: $requirements" >&2; return 1 ;;
+            esac
+            requirements_path="${{ steps.run.outputs.target_name }}/$requirements"
+            test -f "$requirements_path" || return $?
+            echo "Installing host build requirements from $requirements_path"
+            # pyproject.toml declares build requirements as TOML, not pip's
+            # requirements-file syntax.  Installing it with -r makes pip try
+            # to parse `[build-system]` as a distribution name.
+            python - "$requirements_path" <<'PY'
+          import pathlib
+          import subprocess
+          import sys
+          import tomllib
+
+          requirements = pathlib.Path(sys.argv[1])
+          if requirements.name == "pyproject.toml":
+              try:
+                  build = tomllib.loads(requirements.read_text(encoding="utf-8")).get("build-system", {})
+              except (OSError, tomllib.TOMLDecodeError) as error:
+                  raise SystemExit(f"Cannot read {requirements}: {error}")
+              values = build.get("requires")
+              if not isinstance(values, list) or not values or not all(isinstance(value, str) and value for value in values):
+                  raise SystemExit(f"{requirements}: build-system.requires must be a non-empty list of requirement strings")
+              subprocess.run([sys.executable, "-m", "pip", "install", *values], check=True)
+          else:
+              subprocess.run([sys.executable, "-m", "pip", "install", "--requirement", str(requirements)], check=True)
+          PY
+            # Some projects pin a patched Meson executable in pyproject.toml
+            # rather than in their requirements file. Verify that declaration
+            # before the paid scan: otherwise meson-python falls back to the
+            # runner's global Meson and reports a misleading build failure.
+            python - "${{ steps.run.outputs.target_name }}" <<'PY'
+          import pathlib
+          import subprocess
+          import sys
+          import tomllib
+
+          root = pathlib.Path(sys.argv[1]).resolve()
+          pyproject = root / "pyproject.toml"
+          if not pyproject.is_file():
+              print("No pyproject.toml; no project-specific Meson executable declared.")
+              raise SystemExit(0)
+
+          try:
+              data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+          except (OSError, tomllib.TOMLDecodeError) as error:
+              raise SystemExit(f"Cannot read {pyproject}: {error}")
+
+          meson = data.get("tool", {}).get("meson-python", {}).get("meson")
+          if meson is None:
+              print("No tool.meson-python.meson executable declared.")
+              raise SystemExit(0)
+          if not isinstance(meson, str) or not meson:
+              raise SystemExit("tool.meson-python.meson must be a non-empty string")
+
+          executable = (root / meson).resolve()
+          if not executable.is_relative_to(root) or not executable.is_file():
+              raise SystemExit(f"Configured Meson executable is missing or unsafe: {meson}")
+
+          print(f"Using project-configured Meson: {executable.relative_to(root)}")
+          subprocess.run([sys.executable, str(executable), "--version"], check=True)
+          PY
+          }
+          set +e
+          prepare
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ]; then
+            echo 10 > out/exit_code
+            jq -n --argjson code 10 --arg reason "Host build dependency preparation failed" \
+              '{stage:"preparation",exit_code:$code,reason:$reason}' > out/execution-status.json
+            exit "$code"
+          fi
 
       # 0 qualified · 1 stage failure · 2 graph-integrity failure ·
       # 3 verification failed. Never collapsed, and never allowed to fail this
       # step — the upload below has to run either way.
       - name: Run the ABIS pipeline
+        if: ${{ matrix.environment_path == '' && steps.host_preparation.outcome == 'success' }}
         id: pipeline
         timeout-minutes: 320
         continue-on-error: true
         run: |
           set +e
-          python abis/bin/abis-pipeline.pyz --config "out/${{ matrix.config_name }}.json"
-          code=$?
+          # The build trace records commands run under lineage, but the
+          # pipeline's own final exception (for example SBOM/config parsing)
+          # is written to its stdout/stderr. Keep that terminal diagnosis in
+          # the evidence bundle as well as in the ephemeral Actions step log.
+          # Tests may import the staged product.  Do not let that import add
+          # interpreter cache files to the install tree: Meson did not install
+          # them, so they must not become part of its lineage evidence.
+          PYTHONDONTWRITEBYTECODE=1 python abis/bin/abis-pipeline.pyz --config "out/${{ matrix.config_name }}.json" 2>&1 | tee out/pipeline.log
+          code="${PIPESTATUS[0]}"
           set -e
           echo "$code" > out/exit_code
+          jq -n --argjson code "$code" '{stage:"pipeline",exit_code:$code}' > out/execution-status.json
           echo "pipeline exited $code"
+
+      - name: Provision the cell container
+        if: ${{ matrix.environment_path != '' }}
+        timeout-minutes: 20
+        env:
+          ABIS_CONFIG_NAME: ${{ matrix.config_name }}
+        run: python3 abis/runtime/run-container-cell.py provision
+
+      - name: Prepare container dependencies
+        id: preparation
+        if: ${{ matrix.environment_path != '' }}
+        timeout-minutes: 60
+        continue-on-error: true
+        env:
+          ABIS_CONFIG_NAME: ${{ matrix.config_name }}
+        run: python3 abis/runtime/run-container-cell.py prepare
+
+      - name: Run prepared ABIS pipeline
+        if: ${{ matrix.environment_path != '' && steps.preparation.outcome == 'success' }}
+        timeout-minutes: 240
+        continue-on-error: true
+        env:
+          ABIS_CONFIG_NAME: ${{ matrix.config_name }}
+        run: python3 abis/runtime/run-container-cell.py pipeline
+
+      - name: Clean up the cell container
+        if: ${{ always() && matrix.environment_path != '' }}
+        run: |
+          if [ -f .abis-container-name ]; then
+            container="$(cat .abis-container-name)"
+            if [[ "$container" =~ ^abis-[a-f0-9]{32}$ ]]; then
+              docker rm --force "$container" || true
+            fi
+          fi
 
       - name: Assemble the evidence bundle
         if: always()
         run: |
+          # `out/` is created by a step that may never have run: if the cell
+          # fails the integrity gate, every later step is skipped and these
+          # always() steps still fire. Without this they cascade into four more
+          # red steps that say nothing about the actual failure.
+          mkdir -p out
           [ -f out/exit_code ] || echo 99 > out/exit_code
           cp "abis/cells/${{ matrix.config_name }}.json" out/cell-config.source.json || true
+          tar -czf bundle.tar.gz out
+          sha256sum bundle.tar.gz
+
+      - name: Upload the evidence bundle
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bundle-${{ matrix.config_name }}-attempt-${{ github.run_attempt }}
+          path: bundle.tar.gz
+          compression-level: 0
+          retention-days: 90
+          if-no-files-found: error
+
+      # Private attestations require GitHub Enterprise Cloud. Opt in with the
+      # run repository's ABIS_PRIVATE_ATTESTATIONS_ENABLED Actions variable
+      # set to 'true' only when that repository has access to the feature.
+      - name: Explain unavailable private attestation
+        if: ${{ always() && github.event.repository.private && vars.ABIS_PRIVATE_ATTESTATIONS_ENABLED != 'true' }}
+        run: |
+          echo "::warning::Bundle provenance attestation skipped for this private repository. Private attestations require GitHub Enterprise Cloud; set ABIS_PRIVATE_ATTESTATIONS_ENABLED=true only when supported."
+          echo "Bundle provenance attestation skipped: private repository has not opted into GitHub Enterprise Cloud attestations. The evidence bundle is uploaded separately and has no attestation from this run." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attest the bundle
+        if: ${{ always() && (github.event.repository.private == false || vars.ABIS_PRIVATE_ATTESTATIONS_ENABLED == 'true') }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: bundle.tar.gz
+
+      - name: Report the cell's exit code
+        if: always()
+        run: |
+          [ ! -f out/execution-status.json ] || cat out/execution-status.json
+          code="$(cat out/exit_code)"
+          show_failure_evidence() {
+            local log
+            shopt -s nullglob
+            # Pipeline output contains the terminal error; build.log alone can
+            # end in a successful Meson compiler probe and hide that error.
+            # The container equivalents are separately retained because docker
+            # exec redirects the entry point's output there.
+            for log in out/pipeline.log out/pipeline-container.log \
+                       out/container-output.log out/prepare-container.log \
+                       out/*/work/evidence/build.log out/*/work/*-scancode.log; do
+              [ -f "$log" ] || continue
+              echo "::group::Tail of $log"
+              tail -n 250 "$log" || true
+              echo "::endgroup::"
+            done
+          }
+          case "$code" in
+            0) echo "::notice::qualified — built, reduced, rebuilt, tests pass" ;;
+            1) show_failure_evidence; echo "::error::stage failure"; exit 1 ;;
+            2) show_failure_evidence; echo "::error::graph-integrity failure"; exit 1 ;;
+            3) show_failure_evidence; echo "::error::verification failed"; exit 1 ;;
+            10) show_failure_evidence; echo "::error::dependency preparation failed; see preparation evidence"; exit 1 ;;
+            11) show_failure_evidence; echo "::error::container execution failed; see execution-status.json"; exit 1 ;;
+            *) echo "::error::pipeline did not report an exit code"; exit 1 ;;
+          esac
+
+  # ── The declared answer ────────────────────────────────────────────────
+  #
+  # What the repository SAYS it depends on, read off its manifests. No build,
+  # no tracer, no reduction, no rebuild — so none of the 320-minute machinery
+  # above applies and neither does its cost.
+  #
+  # IT CHECKS THE TARGET OUT RATHER THAN READING THE SNAPSHOT, because the
+  # scanner wants a filesystem and this server has the repository in Postgres.
+  # Same commit, and the snapshot has been proved to rebuild that commit's git
+  # tree, so it is the same bytes — see the banner in src/declared.ts.
+  #
+  # `submodules: false`, deliberately and unlike the build job: a snapshot
+  # records a gitlink, not the submodule's contents, so pulling them in here
+  # would describe a tree larger than the one this run claims to be about.
+  declared:
+    needs: matrix
+    if: needs.matrix.outputs.declared != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.declared) }}
+    runs-on: ${{ matrix.runner }}
+    # Reading manifests, not building. cdxgen's own resolution is the slow
+    # part and it is minutes; an hour is the backstop, not the expectation.
+    timeout-minutes: 60
+    steps:
+      - name: Check out the run ref (our pipeline — never the target's code)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Verify the zipapps against SHA256SUMS
+        working-directory: abis/bin
+        run: sha256sum --check --strict SHA256SUMS
+
+      - name: Read abis/run.json
+        id: run
+        run: |
+          jq -r '
+            "target_repo=\(.target.owner)/\(.target.repo)",
+            "target_name=\(.target.repo)",
+            "target_sha=\(.target.sha)"
+          ' abis/run.json >> "$GITHUB_OUTPUT"
+
+      - name: Check out the target at its pinned commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.run.outputs.target_repo }}
+          ref: ${{ steps.run.outputs.target_sha }}
+          path: ${{ steps.run.outputs.target_name }}
+          submodules: false
+          persist-credentials: false
+
+
+      - name: Set up Python ${{ matrix.python }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+
+      # CDXGEN ONLY. From 2026-09-20 this job also ran ScanCode over every
+      # file, because notepad-plus-plus declares nothing and the compliance
+      # answer for a tree like that is per file. That answer now comes from the
+      # server's `licence_scan` step (SBOM-007): the worker scans each stored
+      # blob once, from the snapshot in the database, and keeps the facts.
+      # Running ScanCode here as well was a second scanner for the same facts,
+      # and on scancode-toolkit it ran 46 minutes into this job's 60-minute cap.
+      - name: Provision cdxgen
+        run: |
+          npm install --global @cyclonedx/cdxgen
+          cdxgen --version
+
+      - name: Record the runner image
+        run: |
+          mkdir -p out
+          jq -n --arg image_os "${ImageOS:-unknown}" \
+                --arg image_version "${ImageVersion:-unknown}" \
+                --arg runner "${{ matrix.runner }}" \
+                --arg content_key "${{ matrix.content_key }}" \
+                --arg abis_run_id "${{ inputs.abis_run_id }}" \
+                --arg mode "declared" \
+                '$ARGS.named' > out/runner.json
+
+      # EVERY FIELD THE CONFIG DECLARES IS PASSED, and spec_version is here
+      # because it was not. The config said CycloneDX 1.7 and the first runs
+      # produced 1.6 — abis_sbom's own default — because the scan step named
+      # only --repo, --technology and --out. A declared field the job ignores
+      # is a config file that lies, and this one lies about the format of the
+      # deliverable.
+      - name: Resolve the cell config
+        id: cell
+        run: |
+          cp "abis/cells/${{ matrix.config_name }}.json" out/cell-config.source.json
+          jq -r '
+            "technology=\(.sbom.technology)",
+            "spec_version=\(.sbom.spec_version)"
+          ' "abis/cells/${{ matrix.config_name }}.json" >> "$GITHUB_OUTPUT"
+          cat "abis/cells/${{ matrix.config_name }}.json"
+
+      # continue-on-error for the reason the build job gives: the evidence
+      # upload below has to run whether this succeeded or not. A scan that
+      # failed is a finding, and a finding with no retained output is a demo.
+      - name: Scan the declared dependencies
+        id: sbom
+        continue-on-error: true
+        run: |
+          set +e
+          python abis/bin/abis-sbom.pyz \
+            --repo "$GITHUB_WORKSPACE/${{ steps.run.outputs.target_name }}" \
+            --technology "${{ steps.cell.outputs.technology }}" \
+            --spec-version "${{ steps.cell.outputs.spec_version }}" \
+            --out out/sbom
+          code=$?
+          set -e
+          echo "$code" > out/exit_code
+          echo "abis-sbom exited $code"
+
+      - name: Assemble the evidence bundle
+        if: always()
+        run: |
+          mkdir -p out
+          [ -f out/exit_code ] || echo 99 > out/exit_code
           tar -czf bundle.tar.gz out
           sha256sum bundle.tar.gz
 
@@ -147,20 +637,30 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
+      # Private attestations require GitHub Enterprise Cloud. Opt in with the
+      # run repository's ABIS_PRIVATE_ATTESTATIONS_ENABLED Actions variable
+      # set to 'true' only when that repository has access to the feature.
+      - name: Explain unavailable private attestation
+        if: ${{ always() && github.event.repository.private && vars.ABIS_PRIVATE_ATTESTATIONS_ENABLED != 'true' }}
+        run: |
+          echo "::warning::Bundle provenance attestation skipped for this private repository. Private attestations require GitHub Enterprise Cloud; set ABIS_PRIVATE_ATTESTATIONS_ENABLED=true only when supported."
+          echo "Bundle provenance attestation skipped: private repository has not opted into GitHub Enterprise Cloud attestations. The evidence bundle is uploaded separately and has no attestation from this run." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Attest the bundle
-        if: always()
+        if: ${{ always() && (github.event.repository.private == false || vars.ABIS_PRIVATE_ATTESTATIONS_ENABLED == 'true') }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: bundle.tar.gz
 
-      - name: Report the cell's exit code
+      # After the upload, for the build job's reason: a failed scan still
+      # leaves its evidence behind.
+      - name: Report the scan's exit code
         if: always()
         run: |
-          code="$(cat out/exit_code)"
-          case "$code" in
-            0) echo "::notice::qualified — built, reduced, rebuilt, tests pass" ;;
-            1) echo "::error::stage failure"; exit 1 ;;
-            2) echo "::error::graph-integrity failure"; exit 1 ;;
-            3) echo "::error::verification failed"; exit 1 ;;
-            *) echo "::error::pipeline did not report an exit code"; exit 1 ;;
-          esac
+          sbom="$(cat out/exit_code)"
+          if [ "$sbom" = "0" ]; then
+            echo "::notice::declared SBOM written — out/sbom/bom.json"
+          else
+            echo "::error::abis-sbom exited $sbom"
+          fi
+          [ "$sbom" = "0" ]
